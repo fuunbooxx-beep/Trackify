@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useContext, useRef } from "react";
+import { Suspense, useState, useContext, useRef, useMemo } from "react";
 import { Navbar } from "@/components/Navbar";
 import { AuthContext } from "@/lib/providers";
 import { ShieldAlert, Image as ImageIcon, CheckCircle2, AlertCircle } from "lucide-react";
@@ -37,7 +37,14 @@ function ReportContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const supabase = createSupabaseBrowserClient();
+  const supabase = useMemo(() => {
+    try {
+      return createSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
+  const supabaseUnavailable = supabase === null;
   const evidenceBucket = "report-evidence";
   const isAdmin = isAdminUser(user);
 
@@ -93,18 +100,23 @@ function ReportContent() {
 
     try {
       const uploadedImageUrls: string[] = [];
-      for (let i = 0; i < files.length; i += 1) {
-        const file = files[i];
-        const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-        const filePath = `${user.uid}/${Date.now()}_${i}_${safeName}`;
-        const { error: uploadError } = await supabase.storage.from(evidenceBucket).upload(filePath, file, {
-          upsert: false,
-          contentType: file.type,
-        });
-        if (uploadError) throw uploadError;
+      if (files.length > 0) {
+        if (!supabase) {
+          throw new Error("SUPABASE_STORAGE_UNAVAILABLE");
+        }
+        for (let i = 0; i < files.length; i += 1) {
+          const file = files[i];
+          const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
+          const filePath = `${user.uid}/${Date.now()}_${i}_${safeName}`;
+          const { error: uploadError } = await supabase.storage.from(evidenceBucket).upload(filePath, file, {
+            upsert: false,
+            contentType: file.type,
+          });
+          if (uploadError) throw uploadError;
 
-        const { data } = supabase.storage.from(evidenceBucket).getPublicUrl(filePath);
-        uploadedImageUrls.push(data.publicUrl);
+          const { data } = supabase.storage.from(evidenceBucket).getPublicUrl(filePath);
+          uploadedImageUrls.push(data.publicUrl);
+        }
       }
 
       let resolvedTargetId = "";
@@ -190,7 +202,13 @@ function ReportContent() {
 
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/row-level security|permission|not allowed|policy/i.test(message)) {
+      if (/SUPABASE_STORAGE_UNAVAILABLE/i.test(message)) {
+        setErrorMsg(
+          lang === "ar"
+            ? "رفع الصور غير متاح حالياً بسبب إعدادات Supabase على الخادم. تقدر تكمل البلاغ بدون صور أو اضبط متغيرات البيئة."
+            : "Image upload is currently unavailable due to Supabase server configuration. You can submit without images or fix environment variables."
+        );
+      } else if (/row-level security|permission|not allowed|policy/i.test(message)) {
         setErrorMsg(
           lang === "ar"
             ? "فشل رفع الصور بسبب صلاحيات Supabase Storage (RLS). تأكد من Policies الخاصة بالـ bucket report-evidence."
@@ -241,6 +259,16 @@ function ReportContent() {
             <div className="bg-destructive/10 border border-destructive/30 text-destructive p-4 rounded-xl flex items-center gap-3 font-semibold">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <span>{errorMsg}</span>
+            </div>
+          )}
+          {supabaseUnavailable && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 p-4 rounded-xl flex items-center gap-3 font-semibold">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>
+                {lang === "ar"
+                  ? "مرفقات الصور متوقفة مؤقتًا بسبب عدم ضبط متغيرات Supabase في Vercel. تقدر تبعت البلاغ بدون صور حاليًا."
+                  : "Image attachments are temporarily unavailable because Supabase env vars are missing on Vercel. You can submit the report without images for now."}
+              </span>
             </div>
           )}
           

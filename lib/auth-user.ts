@@ -12,7 +12,7 @@ export type AppUser = {
 export const ADMIN_EMAIL = "dinzypro@gmail.com";
 
 export function isAdminUser(user: Pick<AppUser, "email"> | null | undefined) {
-  return user?.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  return user?.email?.trim()?.toLowerCase() === ADMIN_EMAIL;
 }
 
 export function mapSupabaseUser(u: SupabaseUser | null): AppUser | null {
@@ -32,6 +32,6 @@ export function mapSupabaseUser(u: SupabaseUser | null): AppUser | null {
     uid: u.id,
     email,
     displayName: fullName,
-    photoURL: email?.trim().toLowerCase() === ADMIN_EMAIL ? ADMIN_AVATAR_URL : avatar,
+    photoURL: email?.trim()?.toLowerCase() === ADMIN_EMAIL ? ADMIN_AVATAR_URL : avatar,
   };
 }
