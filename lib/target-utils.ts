@@ -1,0 +1,394 @@
+export type TargetLink = {
+  platform: string;
+  url: string;
+};
+
+export type TargetReasonOption = {
+  value: string;
+  labelEn: string;
+  labelAr: string;
+  descriptionEn: string;
+  descriptionAr: string;
+};
+
+export type TargetRecord = {
+  id?: string;
+  name?: string;
+  aliases?: string[];
+  type?: string;
+  phone?: string;
+  phones?: string[];
+  link?: string;
+  links?: TargetLink[];
+  logoUrl?: string | null;
+  status?: "trusted" | "warning" | "severe_warning" | "high_risk" | "reviewing" | "no_data" | string;
+  trustScore?: number;
+  reportCount?: number;
+  reasons?: string[];
+  /** 0–1 share of approved reports marked successful_transaction */
+  successRatio?: number;
+  lastScamAt?: number;
+  lastSuccessAt?: number;
+  claimedByUserId?: string | null;
+  searchTerms?: string[];
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type TargetStatsRecord = {
+  targetId: string;
+  approvedReports: number;
+  scamReports: number;
+  successReports: number;
+  delayReports: number;
+  badTreatmentReports: number;
+  verifiedReports: number;
+  evidenceStrongReports: number;
+  lastReportAt: number;
+  /** Max createdAt among approved scam-category reports */
+  lastScamAt: number;
+  /** Max createdAt among approved successful_transaction reports */
+  lastSuccessAt: number;
+  /** successReports / approvedReports (0 if none) */
+  successRatio: number;
+  trustScore: number;
+  status: TargetRecord["status"];
+  updatedAt: number;
+};
+
+export const TARGET_REASON_OPTIONS: TargetReasonOption[] = [
+  {
+    value: "scam",
+    labelEn: "SCAM",
+    labelAr: "\u0646\u0635\u0628",
+    descriptionEn: "Reports mention scam behavior, unpaid deals, or missing delivery.",
+    descriptionAr: "\u0628\u0644\u0627\u063a\u0627\u062a \u0639\u0646 \u0646\u0635\u0628 \u0623\u0648 \u0639\u062f\u0645 \u062a\u0633\u0644\u064a\u0645 \u0623\u0648 \u062a\u0639\u0627\u0645\u0644 \u063a\u064a\u0631 \u0622\u0645\u0646.",
+  },
+  {
+    value: "fake_followers",
+    labelEn: "FAKE FOLLOWERS",
+    labelAr: "\u0645\u062a\u0627\u0628\u0639\u064a\u0646 \u0648\u0647\u0645\u064a\u064a\u0646",
+    descriptionEn: "Audience or engagement may be inflated with fake followers.",
+    descriptionAr: "\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u064a\u0646 \u0623\u0648 \u0627\u0644\u062a\u0641\u0627\u0639\u0644 \u0642\u062f \u064a\u0643\u0648\u0646 \u0648\u0647\u0645\u064a\u0627.",
+  },
+  {
+    value: "angry_reacts",
+    labelEn: "ANGRY REACTS \ud83d\ude21",
+    labelAr: "\u062a\u0641\u0627\u0639\u0644\u0627\u062a \u0623\u063a\u0636\u0628\u0646\u064a \ud83d\ude21",
+    descriptionEn: "The page has visible angry reactions or repeated negative reactions.",
+    descriptionAr: "\u064a\u0648\u062c\u062f \u062a\u0641\u0627\u0639\u0644 \u063a\u0636\u0628 \u0623\u0648 \u062a\u0641\u0627\u0639\u0644\u0627\u062a \u0633\u0644\u0628\u064a\u0629 \u0645\u062a\u0643\u0631\u0631\u0629.",
+  },
+  {
+    value: "fake_giveaway",
+    labelEn: "FAKE GIVEAWAY",
+    labelAr: "\u062c\u064a\u0641 \u0623\u0648\u0627\u064a \u0648\u0647\u0645\u064a",
+    descriptionEn: "Giveaways, offers, or prizes look misleading.",
+    descriptionAr: "\u0639\u0631\u0648\u0636 \u0623\u0648 \u062c\u0648\u0627\u0626\u0632 \u062a\u0628\u062f\u0648 \u0645\u0636\u0644\u0644\u0629.",
+  },
+  {
+    value: "impersonation",
+    labelEn: "IMPERSONATION",
+    labelAr: "\u0627\u0646\u062a\u062d\u0627\u0644 \u0634\u062e\u0635\u064a\u0629",
+    descriptionEn: "The page may be copying another brand, seller, or public identity.",
+    descriptionAr: "\u0627\u0644\u0635\u0641\u062d\u0629 \u0642\u062f \u062a\u0646\u062a\u062d\u0644 \u0628\u0631\u0627\u0646\u062f \u0623\u0648 \u0628\u0627\u0626\u0639 \u0623\u0648 \u0647\u0648\u064a\u0629 \u0623\u062e\u0631\u0649.",
+  },
+  {
+    value: "no_delivery",
+    labelEn: "NO DELIVERY",
+    labelAr: "\u0639\u062f\u0645 \u062a\u0633\u0644\u064a\u0645",
+    descriptionEn: "Customers report paying without receiving the agreed item or service.",
+    descriptionAr: "\u0639\u0645\u0644\u0627\u0621 \u0628\u0644\u063a\u0648\u0627 \u0639\u0646 \u062f\u0641\u0639 \u0628\u062f\u0648\u0646 \u0627\u0633\u062a\u0644\u0627\u0645.",
+  },
+  {
+    value: "payment_delay",
+    labelEn: "PAYMENT DELAY",
+    labelAr: "\u062a\u0623\u062e\u064a\u0631 \u062f\u0641\u0639",
+    descriptionEn: "Repeated delays around payments, refunds, or payouts.",
+    descriptionAr: "\u062a\u0623\u062e\u064a\u0631 \u0645\u062a\u0643\u0631\u0631 \u0641\u064a \u0627\u0644\u062f\u0641\u0639 \u0623\u0648 \u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f.",
+  },
+  {
+    value: "bad_treatment",
+    labelEn: "BAD TREATMENT",
+    labelAr: "\u0633\u0648\u0621 \u062a\u0639\u0627\u0645\u0644",
+    descriptionEn: "Reports mention rude handling, threats, or poor after-sale support.",
+    descriptionAr: "\u0628\u0644\u0627\u063a\u0627\u062a \u0639\u0646 \u0633\u0648\u0621 \u062a\u0639\u0627\u0645\u0644 \u0623\u0648 \u062a\u0647\u062f\u064a\u062f \u0623\u0648 \u062f\u0639\u0645 \u0636\u0639\u064a\u0641.",
+  },
+  {
+    value: "chargeback_risk",
+    labelEn: "CHARGEBACK RISK",
+    labelAr: "\u062e\u0637\u0631 \u0627\u0633\u062a\u0631\u062f\u0627\u062f",
+    descriptionEn: "Transactions may carry dispute, refund, or chargeback risk.",
+    descriptionAr: "\u0627\u0644\u062a\u0639\u0627\u0645\u0644 \u0642\u062f \u064a\u062d\u0645\u0644 \u062e\u0637\u0631 \u0646\u0632\u0627\u0639 \u0623\u0648 \u0627\u0633\u062a\u0631\u062f\u0627\u062f.",
+  },
+];
+
+export const STATUS_LABELS: Record<string, string> = {
+  trusted: "Trusted",
+  warning: "Warning",
+  severe_warning: "Severe warning",
+  high_risk: "High risk",
+  reviewing: "Under review",
+  no_data: "No data",
+};
+
+export function getStatusLabel(status: string, lang: "en" | "ar" = "en") {
+  const arLabels: Record<string, string> = {
+    warning: "\u062a\u062d\u0630\u064a\u0631",
+    severe_warning: "\u062a\u062d\u0630\u064a\u0631 \u0634\u062f\u064a\u062f",
+    trusted: "موثوق",
+    high_risk: "عالي الخطورة",
+    reviewing: "قيد المراجعة",
+    no_data: "لا بيانات",
+  };
+  if (lang === "ar") return arLabels[status] || arLabels.reviewing;
+  return STATUS_LABELS[status] || STATUS_LABELS.reviewing;
+}
+
+export function getRiskStatusFromReportCount(reportCount: number, fallbackStatus = "reviewing") {
+  const count = Number(reportCount || 0);
+  const reportStatus = count > 2 ? "high_risk" : count === 2 ? "severe_warning" : count === 1 ? "warning" : fallbackStatus || "reviewing";
+  const severity: Record<string, number> = {
+    trusted: 0,
+    reviewing: 0,
+    warning: 1,
+    severe_warning: 2,
+    high_risk: 3,
+  };
+  return (severity[fallbackStatus] || 0) > (severity[reportStatus] || 0) ? fallbackStatus : reportStatus;
+}
+
+export function normalizePhone(input: string) {
+  const digits = String(input || "")
+    .replace(/[\s\-()]/g, "")
+    .replace(/[^\d+]/g, "");
+  if (!digits) return "";
+  let normalized = digits;
+  if (normalized.startsWith("0020")) normalized = normalized.slice(2);
+  if (normalized.startsWith("+20")) normalized = `0${normalized.slice(3)}`;
+  if (normalized.startsWith("20") && normalized.length >= 11) normalized = `0${normalized.slice(2)}`;
+  return normalized.replace(/[^\d]/g, "");
+}
+
+export function normalizeUrl(input: string) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(withProtocol);
+    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    parsed.hash = "";
+    ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid"].forEach((key) =>
+      parsed.searchParams.delete(key)
+    );
+    if (parsed.pathname.endsWith("/") && parsed.pathname !== "/") {
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return raw.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/+$/, "");
+  }
+}
+
+export function normalizeTargetName(input: string) {
+  return String(input || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ");
+}
+
+export function detectPlatform(url: string) {
+  const lower = url.toLowerCase();
+  if (lower.includes("facebook.com") || lower.includes("fb.com")) return "facebook";
+  if (lower.includes("instagram.com")) return "instagram";
+  if (lower.includes("tiktok.com")) return "tiktok";
+  if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "youtube";
+  if (lower.includes("wa.me") || lower.includes("whatsapp.com")) return "whatsapp";
+  return "website";
+}
+
+export function platformLabel(platform: string) {
+  const labels: Record<string, string> = {
+    facebook: "Facebook",
+    instagram: "Instagram",
+    tiktok: "TikTok",
+    youtube: "YouTube",
+    whatsapp: "WhatsApp",
+    website: "Website",
+  };
+  return labels[platform] || platform || "Website";
+}
+
+export function normalizeTargetReasons(reasons: unknown) {
+  if (!Array.isArray(reasons)) return [];
+  const validValues = new Set(TARGET_REASON_OPTIONS.map((option) => option.value));
+  const normalized = reasons
+    .map((reason) =>
+      String(reason || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_")
+    )
+    .filter((reason) => reason && validValues.has(reason));
+
+  return Array.from(new Set(normalized));
+}
+
+export function getTargetReasons(target: TargetRecord) {
+  return normalizeTargetReasons(target.reasons);
+}
+
+export function getTargetReasonOption(value: string) {
+  return TARGET_REASON_OPTIONS.find((option) => option.value === value);
+}
+
+export function getTargetReasonLabel(value: string, lang: "en" | "ar" = "en") {
+  const option = getTargetReasonOption(value);
+  if (!option) return value.replace(/_/g, " ").toUpperCase();
+  return lang === "ar" ? option.labelAr : option.labelEn;
+}
+
+export function getTargetReasonDescription(value: string, lang: "en" | "ar" = "en") {
+  const option = getTargetReasonOption(value);
+  if (!option) return "";
+  return lang === "ar" ? option.descriptionAr : option.descriptionEn;
+}
+
+export function hostFromUrl(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url.replace(/^https?:\/\//, "").split("/")[0] || url;
+  }
+}
+
+export function slugifyTargetName(name: string) {
+  const slug = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90);
+
+  return slug || "target";
+}
+
+export function extractTargetIdFromSlug(slugOrId: string) {
+  const decoded = decodeURIComponent(slugOrId || "");
+  const separatorIndex = decoded.lastIndexOf("--");
+  return separatorIndex >= 0 ? decoded.slice(separatorIndex + 2) : decoded;
+}
+
+export function getTargetHref(target: Pick<TargetRecord, "id" | "name">) {
+  const id = String(target.id || "").trim();
+  return `/target/${slugifyTargetName(String(target.name || "target"))}--${encodeURIComponent(id)}`;
+}
+
+export function getTargetPhones(target: TargetRecord) {
+  const phones = Array.isArray(target.phones) ? target.phones : [];
+  const fallback = target.phone ? [target.phone] : [];
+  return Array.from(new Set([...phones, ...fallback].map(normalizePhone).filter(Boolean)));
+}
+
+export function getTargetLinks(target: TargetRecord) {
+  const links = Array.isArray(target.links) ? target.links : [];
+  const fallback = target.link ? [{ platform: detectPlatform(target.link), url: target.link }] : [];
+  const seen = new Set<string>();
+  return [...links, ...fallback]
+    .map((item) => ({
+      platform: item.platform || detectPlatform(item.url || ""),
+      url: normalizeUrl(item.url || ""),
+    }))
+    .filter((item) => {
+      if (!item.url || seen.has(item.url)) return false;
+      seen.add(item.url);
+      return true;
+    });
+}
+
+export function normalizeTargetAliases(aliases: unknown) {
+  if (!Array.isArray(aliases)) return [];
+  const seen = new Set<string>();
+  return aliases
+    .map((alias) => String(alias || "").trim())
+    .filter((alias) => {
+      const normalized = normalizeTargetName(alias);
+      if (!normalized || seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+}
+
+export function getTargetAliases(target: TargetRecord) {
+  return normalizeTargetAliases(target.aliases);
+}
+
+export function generateSearchTerms(name: string, phones: string[], links: TargetLink[], aliases: string[] = []) {
+  const terms = new Set<string>();
+  const names = [name, ...aliases];
+
+  for (const item of names) {
+    const normalizedName = normalizeTargetName(item);
+    if (normalizedName) {
+      terms.add(normalizedName);
+      normalizedName.split(/\s+/).forEach((part) => part && terms.add(part));
+    }
+  }
+
+  phones.map(normalizePhone).filter(Boolean).forEach((phone) => terms.add(phone));
+
+  links.forEach((link) => {
+    const normalized = normalizeUrl(link.url).toLowerCase();
+    if (!normalized) return;
+    terms.add(normalized);
+    terms.add(hostFromUrl(normalized).toLowerCase());
+  });
+
+  return Array.from(terms);
+}
+
+export function targetPayload(input: {
+  name: string;
+  aliases?: string[];
+  type: string;
+  phones: string[];
+  links: TargetLink[];
+  logoUrl: string;
+  status: string;
+  trustScore: number;
+  reportCount: number;
+  claimedByUserId: string;
+  reasons?: string[];
+  createdAt?: number;
+}) {
+  const phones = input.phones.map(normalizePhone).filter(Boolean);
+  const links = input.links
+    .map((link) => ({
+      platform: link.platform || detectPlatform(link.url),
+      url: normalizeUrl(link.url),
+    }))
+    .filter((link) => link.url);
+  const now = Date.now();
+  const reasons = normalizeTargetReasons(input.reasons);
+  const aliases = normalizeTargetAliases(input.aliases);
+
+  return {
+    name: input.name.trim(),
+    aliases,
+    type: input.type.trim().toLowerCase() || "page",
+    phone: phones[0] || "",
+    phones,
+    link: links[0]?.url || "",
+    links,
+    logoUrl: input.logoUrl.trim() || null,
+    status: input.status,
+    trustScore: Number(input.trustScore),
+    reportCount: Number(input.reportCount),
+    reasons,
+    claimedByUserId: input.claimedByUserId.trim() || null,
+    searchTerms: generateSearchTerms(input.name, phones, links, aliases),
+    createdAt: input.createdAt || now,
+    updatedAt: now,
+  };
+}

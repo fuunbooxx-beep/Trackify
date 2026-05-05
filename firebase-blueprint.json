@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the platform.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin", "verified_seller"] },
+        "reputationScore": { "type": "number", "description": "Trust level of the user" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "Target": {
+      "title": "Report Target",
+      "description": "A page, seller, or phone number being tracked.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["page", "person", "group"] },
+        "link": { "type": "string" },
+        "phone": { "type": "string" },
+        "searchTerms": { "type": "array", "items": { "type": "string" }, "description": "For basic search" },
+        "status": { "type": "string", "enum": ["trusted", "reviewing", "high_risk"] },
+        "trustScore": { "type": "number", "description": "Computed trust score 0-100" },
+        "reportCount": { "type": "number" },
+        "claimedByUserId": { "type": "string", "description": "If claimed by a verified seller" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "status", "trustScore", "reportCount", "createdAt", "updatedAt"]
+    },
+    "Report": {
+      "title": "Scam/Issue Report",
+      "description": "A report filed against a target.",
+      "type": "object",
+      "properties": {
+        "targetId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "category": { "type": "string", "enum": ["scam", "delay", "bad_treatment"] },
+        "description": { "type": "string" },
+        "evidenceImages": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["targetId", "authorId", "category", "description", "status", "createdAt"]
+    },
+    "Reply": {
+      "title": "Target Reply",
+      "description": "Right to reply for target owners.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "content": { "type": "string" },
+        "evidenceImages": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["reportId", "authorId", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles."
+    },
+    "/targets/{targetId}": {
+      "schema": { "$ref": "#/entities/Target" },
+      "description": "The gaming pages, sellers, or numbers."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Reports against targets."
+    },
+    "/replies/{replyId}": {
+      "schema": { "$ref": "#/entities/Reply" },
+      "description": "Replies from verified sellers on reports."
+    }
+  }
+}

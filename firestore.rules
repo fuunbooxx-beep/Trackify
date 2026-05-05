@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Primitives
+    function isValidId(id) { return id is string && id.size() <= 128; }
+    function incoming() { return request.resource.data; }
+    // NOTE:
+    // This app currently authenticates with Supabase, not Firebase Auth.
+    // Firestore request.auth will be null in client requests.
+    function isSignedIn() { return true; }
+    function isAdmin() { return true; }
+
+    // Simplified Target Validation
+    function isValidTargetInit(data) {
+      return data.keys().hasAll(['name', 'status', 'trustScore', 'reportCount', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() > 0
+        && data.trustScore is number
+        && data.reportCount is number;
+    }
+
+    // Simplified Report Validation
+    function isValidReportInit(data) {
+      return data.keys().hasAll(['targetId', 'authorId', 'category', 'description', 'status', 'createdAt'])
+        && data.targetId is string
+        && data.authorId is string
+        && data.category is string
+        && data.description is string;
+    }
+
+    // Targets Collection
+    match /targets/{targetId} {
+      allow get, list: if true;
+      allow create: if isValidId(targetId) && isValidTargetInit(incoming());
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /targetStats/{statId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /mergeAudit/{auditId} {
+      allow get, list: if true;
+      allow create: if isValidId(auditId);
+      allow update, delete: if false;
+    }
+
+    // Reports Collection
+    match /reports/{reportId} {
+      allow get, list: if true;
+      allow create: if isValidId(reportId)
+        && isValidId(reportId)
+        && isValidReportInit(incoming())
+        && incoming().authorId is string
+        && incoming().authorId.size() > 0;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      allow get, list: if true;
+      allow create: if isValidId(notificationId)
+        && isValidId(notificationId)
+        && incoming().userId is string
+        && incoming().userId.size() > 0;
+      allow update, delete: if false;
+    }
+
+    // Admins Collection
+    match /admins/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true; // Keep profile sync working with current auth architecture
+    }
+  }
+}

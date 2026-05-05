@@ -1,0 +1,18 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "site": "trackify-10c4c",
+    "source": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "gametrust-egypt/**"
+    ],
+    "frameworksBackend": {
+      "region": "europe-west2"
+    }
+  }
+}
