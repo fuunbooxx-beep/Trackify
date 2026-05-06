@@ -4,7 +4,6 @@ import { Moon, Sun, Menu, X, User as UserIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "@/lib/providers";
-import { isAdminUser } from "@/lib/auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useLanguage } from "@/lib/i18n/context";
 import { reloadWithRouteLoader, showRouteLoader } from "@/components/RouteLoadingController";
@@ -20,7 +19,6 @@ export function Navbar() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const isAdmin = isAdminUser(user);
   const logoSrc =
     mounted && resolvedTheme === "dark"
       ? "https://res.cloudinary.com/dv4qomvdt/image/upload/v1778000404/ChatGPT_Image_May_5_2026_07_58_44_PM_2_-Photoroom_grak0v.png"
@@ -32,10 +30,9 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    const routes = ["/", "/report", "/trending", "/about", user ? "/profile" : "/auth"];
-    if (isAdmin) routes.push("/dashboard");
+    const routes = ["/", "/report", "/category", "/trending", "/about", user ? "/profile" : "/auth"];
     routes.forEach((route) => router.prefetch(route));
-  }, [router, isAdmin, user]);
+  }, [router, user]);
 
   const handleLogout = async () => {
     showRouteLoader();
@@ -85,7 +82,7 @@ export function Navbar() {
           <div className="hidden md:flex items-center gap-6">
             <NavLink href="/" text={t("navbar.home", "Home")} />
             <NavLink href="/report" text={t("navbar.report", "Rate & Share")} />
-            {isAdmin && <NavLink href="/dashboard" text={t("navbar.dashboard", "Dashboard")} />}
+            <NavLink href="/category" text={t("navbar.category", "Categories")} />
             <NavLink href="/trending" text={t("navbar.trending", "Trending")} />
             <NavLink href="/about" text={t("navbar.about", "About")} />
           </div>
@@ -159,7 +156,7 @@ export function Navbar() {
           <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 pb-6 pt-3">
             <MobileNavLink href="/" text={t("navbar.home", "Home")} onClick={() => setMobileMenuOpen(false)} />
             <MobileNavLink href="/report" text={t("navbar.report", "Rate & Share")} onClick={() => setMobileMenuOpen(false)} />
-            {isAdmin && <MobileNavLink href="/dashboard" text={t("navbar.dashboard", "Dashboard")} onClick={() => setMobileMenuOpen(false)} />}
+            <MobileNavLink href="/category" text={t("navbar.category", "Categories")} onClick={() => setMobileMenuOpen(false)} />
             <MobileNavLink href="/trending" text={t("navbar.trending", "Trending")} onClick={() => setMobileMenuOpen(false)} />
             <MobileNavLink href="/about" text={t("navbar.about", "About")} onClick={() => setMobileMenuOpen(false)} />
             {user ? (

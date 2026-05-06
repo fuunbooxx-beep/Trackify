@@ -32,6 +32,7 @@ import {
   detectPlatform,
   generateSearchTerms,
   getRiskStatusFromReportCount,
+  getTargetCategoryLabel,
   getTargetHref,
   getTargetAliases,
   getTargetLinks,
@@ -40,6 +41,7 @@ import {
   hostFromUrl,
   platformLabel,
   TARGET_REASON_OPTIONS,
+  TARGET_CATEGORY_OPTIONS,
   targetPayload,
   type TargetLink,
   type TargetRecord,
@@ -82,6 +84,7 @@ export default function DashboardPage() {
   const [name, setName] = useState("");
   const [aliases, setAliases] = useState<string[]>([""]);
   const [type, setType] = useState("page");
+  const [category, setCategory] = useState("gaming");
   const [phones, setPhones] = useState<string[]>([""]);
   const [links, setLinks] = useState<TargetLink[]>([{ ...emptyLink }]);
   const [logoUrl, setLogoUrl] = useState("");
@@ -124,6 +127,8 @@ export default function DashboardPage() {
   const [mergeDuplicateInput, setMergeDuplicateInput] = useState("");
   const [mergeBusy, setMergeBusy] = useState(false);
   const [syncAllBusy, setSyncAllBusy] = useState(false);
+  const [targetSearch, setTargetSearch] = useState("");
+  const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
 
   const cleanPhones = useMemo(() => phones.map((phone) => phone.trim()).filter(Boolean), [phones]);
   const cleanLinks = useMemo(
@@ -137,6 +142,24 @@ export default function DashboardPage() {
   const isEditing = Boolean(targetId);
   const fuzzyThreshold = 0.84;
   const sharedPhoneClusters = useMemo(() => findSharedPhoneClusters(targets), [targets]);
+  const filteredTargets = useMemo(() => {
+    const query = targetSearch.trim().toLowerCase();
+    return targets.filter((target) => {
+      const matchesCategory = targetCategoryFilter === "all" || String(target.category || "gaming") === targetCategoryFilter;
+      if (!matchesCategory) return false;
+      if (!query) return true;
+      const nameValue = String(target.name || "").toLowerCase();
+      const idValue = String(target.id || "").toLowerCase();
+      const aliasesValue = getTargetAliases(target).join(" ").toLowerCase();
+      const phonesValue = getTargetPhones(target).join(" ");
+      return (
+        nameValue.includes(query) ||
+        idValue.includes(query) ||
+        aliasesValue.includes(query) ||
+        phonesValue.includes(query)
+      );
+    });
+  }, [targets, targetSearch, targetCategoryFilter]);
 
   const pendingMatchMap = useMemo(() => {
     const map: Record<string, { target?: TargetRecord; score: number; reason?: MatchReason }> = {};
@@ -152,6 +175,7 @@ export default function DashboardPage() {
     setName("");
     setAliases([""]);
     setType("page");
+    setCategory("gaming");
     setPhones([""]);
     setLinks([{ ...emptyLink }]);
     setLogoUrl("");
@@ -172,6 +196,7 @@ export default function DashboardPage() {
     setName(target.name || "");
     setAliases(getTargetAliases(target).length ? getTargetAliases(target) : [""]);
     setType(target.type || "page");
+    setCategory(String(target.category || "gaming"));
     setPhones(normalizedPhones.length ? normalizedPhones : [""]);
     setLinks(normalizedLinks.length ? normalizedLinks : [{ ...emptyLink }]);
     setLogoUrl(target.logoUrl || "");
@@ -318,6 +343,7 @@ export default function DashboardPage() {
         name: candidateName,
         aliases: baseData ? getTargetAliases(baseData) : [],
         type: String(report.targetType || baseData?.type || "page"),
+        category: String(baseData?.category || "gaming"),
         phones: [String(report.targetPhone || ""), ...(baseData ? getTargetPhones(baseData) : [])],
         links: [{ platform: detectPlatform(String(report.targetLink || "")), url: String(report.targetLink || "") }, ...(baseData ? getTargetLinks(baseData) : [])],
         logoUrl: String(baseData?.logoUrl || ""),
@@ -470,6 +496,7 @@ export default function DashboardPage() {
         name: manualTargetName.trim(),
         aliases: baseData ? getTargetAliases(baseData) : [],
         type: String(baseData?.type || "page"),
+        category: String(baseData?.category || "gaming"),
         phones: [manualTargetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
         links: [{ platform: detectPlatform(manualTargetLink.trim()), url: manualTargetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
         logoUrl: String(baseData?.logoUrl || ""),
@@ -732,6 +759,7 @@ export default function DashboardPage() {
         name,
         aliases,
         type,
+        category,
         phones,
         links,
         logoUrl,
@@ -831,6 +859,16 @@ export default function DashboardPage() {
 
                 <Field label={lang === "ar" ? "النوع / Badge" : "Type / badge"}>
                   <input value={type} onChange={(e) => setType(e.target.value)} className="input" placeholder="page / seller / whatsapp" />
+                </Field>
+
+                <Field label={lang === "ar" ? "تصنيف الصفحة" : "Page category"}>
+                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
+                    {TARGET_CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {lang === "ar" ? option.labelAr : option.labelEn}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
 
                 <Field label={lang === "ar" ? "الحالة" : "Status"}>
@@ -1026,8 +1064,29 @@ export default function DashboardPage() {
                 </button>
               </div>
 
+              <div className="space-y-2">
+                <input
+                  value={targetSearch}
+                  onChange={(e) => setTargetSearch(e.target.value)}
+                  className="input"
+                  placeholder={lang === "ar" ? "ابحث بالاسم / ID / رقم الهاتف" : "Search by name / ID / phone"}
+                />
+                <select
+                  value={targetCategoryFilter}
+                  onChange={(e) => setTargetCategoryFilter(e.target.value)}
+                  className="input"
+                >
+                  <option value="all">{lang === "ar" ? "كل التصنيفات" : "All categories"}</option>
+                  {TARGET_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {lang === "ar" ? option.labelAr : option.labelEn}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
-                {targets.map((target) => (
+                {filteredTargets.map((target) => (
                   <div key={target.id} className="rounded-2xl border border-border bg-background/60 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1035,6 +1094,11 @@ export default function DashboardPage() {
                         <p className="text-xs text-muted-foreground mt-1" dir="ltr">
                           {target.id}
                         </p>
+                        <div className="mt-2">
+                          <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2 py-1 text-[11px] font-black text-primary dark:text-neon-blue">
+                            {getTargetCategoryLabel(String(target.category || "gaming"), lang)}
+                          </span>
+                        </div>
                         <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                           {getTargetPhones(target).slice(0, 2).map((phone) => (
                             <span key={phone} className="rounded-full bg-secondary px-2 py-1" dir="ltr">
@@ -1059,6 +1123,11 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
+                {filteredTargets.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {lang === "ar" ? "لا توجد صفحات مطابقة للفلاتر الحالية." : "No targets match the current filters."}
+                  </p>
+                )}
               </div>
             </aside>
           </div>

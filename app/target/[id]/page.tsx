@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   ShieldQuestion,
   Store,
+  Layers,
   Trash2,
   X,
   Youtube,
@@ -40,11 +41,13 @@ import {
   getTargetAliases,
   getTargetLinks,
   getTargetPhones,
+  getTargetCategoryLabel,
   getTargetReasonDescription,
   getTargetReasonLabel,
   getTargetReasons,
   getStatusLabel,
   hostFromUrl,
+  normalizeTargetCategory,
   platformLabel,
   type TargetRecord,
 } from "@/lib/target-utils";
@@ -201,6 +204,8 @@ export default function TargetDetailsPage() {
   const phones = getTargetPhones(target);
   const links = getTargetLinks(target);
   const aliases = getTargetAliases(target);
+  const categorySlug = normalizeTargetCategory(target.category);
+  const categoryLabel = getTargetCategoryLabel(categorySlug, lang);
   const targetReasons = getTargetReasons(target);
   const reportCount = Number(target.reportCount ?? 0);
   const isDealNotRecommended = reportCount >= 3;
@@ -592,23 +597,30 @@ export default function TargetDetailsPage() {
   return (
     <>
       <Navbar />
-      <main className="max-w-6xl mx-auto px-4 py-24 min-h-screen text-slate-900 dark:text-slate-100">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-24 min-h-screen overflow-x-hidden text-slate-900 dark:text-slate-100">
         <section
           className={`glass-panel overflow-hidden rounded-[32px] border shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:shadow-[0_26px_90px_rgba(0,0,0,0.55)] ${
             isNoData ? "border-t-border" : isHighRisk ? "border-t-destructive" : isTrusted ? "border-t-green-500" : "border-t-yellow-500"
           }`}
         >
-          <div className="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="p-5 md:p-8 xl:p-10">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0 p-4 sm:p-5 md:p-8 xl:p-9">
+              <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
                 <LogoBlock logoUrl={target.logoUrl || ""} name={target.name || ""} />
 
-                <div className="min-w-0 flex-1">
-                  <div className="mb-3 flex flex-wrap items-center gap-3">
+                <div className="min-w-0 flex-1 text-center sm:text-start">
+                  <div className="mb-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
                     <span className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/70 px-3 py-1 text-xs font-black uppercase tracking-wide">
                       <BadgeInfo className="w-4 h-4" />
                       {target.type || "page"}
                     </span>
+                    <Link
+                      href={`/category#${categorySlug}`}
+                      className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-black text-primary transition hover:bg-primary/15 dark:border-neon-blue/30 dark:bg-neon-blue/10 dark:text-neon-blue"
+                    >
+                      <Layers className="h-4 w-4 shrink-0" />
+                      <span className="max-w-[220px] truncate">{categoryLabel}</span>
+                    </Link>
                     {target.claimedByUserId && (
                       <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-black text-primary dark:text-neon-blue">
                         <ShieldCheck className="w-4 h-4" />
@@ -617,10 +629,12 @@ export default function TargetDetailsPage() {
                     )}
                   </div>
 
-                  <h1 className="mb-4 text-3xl font-black tracking-normal break-words md:text-5xl">{target.name}</h1>
+                  <h1 className="mb-3 text-2xl font-black tracking-normal break-words md:text-4xl lg:text-5xl">
+                    {target.name}
+                  </h1>
 
                   {aliases.length > 0 && (
-                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <div className="mb-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                       <span className="text-xs font-black uppercase tracking-wide text-muted-foreground">
                         {lang === "ar" ? "\u0645\u0639\u0631\u0648\u0641\u0629 \u0623\u064a\u0636\u0627 \u0628\u0627\u0633\u0645" : "Also known as"}
                       </span>
@@ -632,7 +646,7 @@ export default function TargetDetailsPage() {
                     </div>
                   )}
 
-                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
+                  <p className="mx-auto max-w-3xl text-sm leading-7 text-muted-foreground md:text-base sm:mx-0">
                     {isNoData
                       ? (lang === "ar"
                           ? "لا توجد بيانات أو بلاغات معتمدة كفاية لعرض تقييم واضح لهذه الصفحة حتى الآن."
@@ -643,7 +657,7 @@ export default function TargetDetailsPage() {
                   </p>
 
                   <div
-                    className={`mt-5 rounded-2xl border px-4 py-3 ${
+                    className={`mt-4 rounded-2xl border px-4 py-3 text-sm md:text-[15px] ${
                       isDealNotRecommended
                         ? "border-destructive/30 bg-destructive/10"
                         : "border-border bg-secondary/35"
@@ -710,8 +724,8 @@ export default function TargetDetailsPage() {
                     </div>
                   )}
 
-                  <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,280px)]">
-                    <div className="rounded-3xl border border-border bg-background/65 p-5">
+                  <div className="mt-6 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)]">
+                    <div className="min-w-0 rounded-3xl border border-border bg-background/65 p-4 sm:p-5">
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted-foreground">
                           {lang === "ar" ? "بيانات التعريف" : "Identity details"}
@@ -780,25 +794,27 @@ export default function TargetDetailsPage() {
               </div>
             </div>
 
-            <aside className={`border-t border-border p-5 md:p-7 xl:border-t-0 xl:border-r ${statusBg}`}>
-              <div className="flex h-full flex-col gap-5">
-                <div className={`inline-flex w-fit items-center gap-2 rounded-full bg-background/80 px-3 py-2 text-sm font-black shadow-sm ${statusClass}`}>
+            <aside className={`border-t border-border p-4 md:p-6 xl:border-t-0 xl:border-r ${statusBg}`}>
+              <div className="flex h-full flex-col gap-4">
+                <div className={`inline-flex w-fit items-center gap-2 rounded-full bg-background/80 px-3 py-1.5 text-xs md:text-sm font-black shadow-sm ${statusClass}`}>
                   {statusIcon}
                   {getStatusLabel(target.status || "reviewing", lang)}
                 </div>
 
-                <div className="rounded-3xl border border-border/70 bg-background/70 p-5 shadow-sm dark:bg-slate-950/35 dark:border-slate-800/60">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+                <div className="rounded-3xl border border-border/70 bg-background/70 p-4 shadow-sm dark:bg-slate-950/35 dark:border-slate-800/60">
+                  <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
                     {lang === "ar" ? "مستوى الثقة" : "Trust Score"}
                   </p>
                   {isNoData ? (
-                    <p className={`mt-2 text-3xl font-black tracking-normal ${statusClass}`}>
+                    <p className={`mt-2 text-2xl md:text-3xl font-black tracking-normal ${statusClass}`}>
                       {lang === "ar" ? "لا بيانات" : "No data"}
                     </p>
                   ) : (
-                    <p className={`mt-2 text-6xl font-black tracking-normal ${statusClass}`}>{Number(target.trustScore ?? 0)}%</p>
+                    <p className={`mt-2 text-4xl md:text-5xl xl:text-6xl font-black tracking-normal ${statusClass}`}>
+                      {Number(target.trustScore ?? 0)}%
+                    </p>
                   )}
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <StarRating
                       value={toStarRating(Number(target.trustScore ?? 50))}
                       label={lang === "ar" ? "تقييم بالنجوم" : "Star rating"}
@@ -816,7 +832,7 @@ export default function TargetDetailsPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2 md:gap-3">
                   <Metric label={lang === "ar" ? "بلاغات معتمدة" : "Approved reports"} value={Number(target.reportCount ?? 0)} />
                   <Metric
                     label={lang === "ar" ? "نسبة النجاح" : "Success ratio"}
@@ -842,7 +858,10 @@ export default function TargetDetailsPage() {
                       {lang === "ar" ? "تعديل البيانات" : "Edit target"}
                     </Link>
                   )}
-                  <Link href={`/report?target=${encodeURIComponent(target.name || "")}`} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-background/80 px-4 py-3 text-sm font-black transition hover:-translate-y-0.5 hover:bg-background">
+                  <Link
+                    href={`/report?target=${encodeURIComponent(target.name || "")}&link=${encodeURIComponent(links[0]?.url || "")}&lock=1`}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-background/80 px-4 py-3 text-sm font-black transition hover:-translate-y-0.5 hover:bg-background"
+                  >
                     <MessageCircle className="w-4 h-4" />
                     {lang === "ar" ? "أضف تجربتك" : "Share your experience"}
                   </Link>
@@ -1407,12 +1426,12 @@ function EvidenceLightbox({
 
 function LogoBlock({ logoUrl, name }: { logoUrl: string; name: string }) {
   return (
-    <div className="shrink-0">
-      <div className="h-24 w-24 md:h-32 md:w-32 rounded-3xl border border-border bg-background overflow-hidden flex items-center justify-center shadow-sm">
+    <div className="shrink-0 self-center sm:self-start lg:self-auto">
+      <div className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 rounded-2xl sm:rounded-3xl border border-border bg-background overflow-hidden flex items-center justify-center shadow-sm">
         {logoUrl ? (
           <img src={logoUrl} alt={name} className="h-full w-full object-cover" />
         ) : (
-          <Store className="w-12 h-12 text-muted-foreground" />
+          <Store className="w-9 h-9 sm:w-11 sm:h-11 text-muted-foreground" />
         )}
       </div>
     </div>

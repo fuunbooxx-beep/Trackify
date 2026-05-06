@@ -11,6 +11,14 @@ export type TargetReasonOption = {
   descriptionAr: string;
 };
 
+export type TargetCategoryOption = {
+  value: string;
+  labelEn: string;
+  labelAr: string;
+  descriptionEn: string;
+  descriptionAr: string;
+};
+
 export type TargetRecord = {
   id?: string;
   name?: string;
@@ -25,6 +33,7 @@ export type TargetRecord = {
   trustScore?: number;
   reportCount?: number;
   reasons?: string[];
+  category?: string;
   /** 0–1 share of approved reports marked successful_transaction */
   successRatio?: number;
   lastScamAt?: number;
@@ -34,6 +43,37 @@ export type TargetRecord = {
   createdAt?: number;
   updatedAt?: number;
 };
+
+export const TARGET_CATEGORY_OPTIONS: TargetCategoryOption[] = [
+  {
+    value: "gaming",
+    labelEn: "Gaming",
+    labelAr: "الألعاب",
+    descriptionEn: "Game stores, top-ups, virtual items, and gaming services.",
+    descriptionAr: "متاجر الألعاب، الشحن، العناصر الرقمية، وخدمات الجيمنج.",
+  },
+  {
+    value: "social_media",
+    labelEn: "Social Media",
+    labelAr: "السوشيال ميديا",
+    descriptionEn: "Pages focused on social media growth, content, or engagement services.",
+    descriptionAr: "صفحات خاصة بالنمو على السوشيال ميديا أو خدمات المحتوى والتفاعل.",
+  },
+  {
+    value: "subscriptions",
+    labelEn: "Subscriptions",
+    labelAr: "الاشتراكات",
+    descriptionEn: "Streaming, software licenses, and recurring digital subscriptions.",
+    descriptionAr: "اشتراكات المنصات، البرامج، والخدمات الرقمية المتكررة.",
+  },
+  {
+    value: "models_clothes",
+    labelEn: "Models / Clothes",
+    labelAr: "موديلز / ملابس",
+    descriptionEn: "Fashion pages, clothing sellers, and model-related stores.",
+    descriptionAr: "صفحات الموضة، بائعي الملابس، والمتاجر المرتبطة بالموديلز.",
+  },
+];
 
 export type TargetStatsRecord = {
   targetId: string;
@@ -238,6 +278,63 @@ export function getTargetReasons(target: TargetRecord) {
   return normalizeTargetReasons(target.reasons);
 }
 
+export function normalizeTargetCategory(category: unknown) {
+  const value = String(category || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  const validValues = new Set(TARGET_CATEGORY_OPTIONS.map((option) => option.value));
+  return validValues.has(value) ? value : "gaming";
+}
+
+export function getTargetCategoryOption(value: string) {
+  const normalized = normalizeTargetCategory(value);
+  return TARGET_CATEGORY_OPTIONS.find((option) => option.value === normalized) || TARGET_CATEGORY_OPTIONS[0];
+}
+
+export function getTargetCategoryLabel(value: string, lang: "en" | "ar" = "en") {
+  const option = getTargetCategoryOption(value);
+  return lang === "ar" ? option.labelAr : option.labelEn;
+}
+
+export function getTargetCategoryDescription(value: string, lang: "en" | "ar" = "en") {
+  const option = getTargetCategoryOption(value);
+  return lang === "ar" ? option.descriptionAr : option.descriptionEn;
+}
+
+/**
+ * How well `queryText` matches the page category of `target` (0–100).
+ * Use with a fuzzy scorer keyed like search: (normalizedQuery, candidate) => number.
+ */
+export function evaluateTargetCategoryTextMatch(queryText: string, target: Pick<TargetRecord, "category">, fuzzy: (q: string, candidate: string) => number): number {
+  const normalizedQuery = normalizeTargetName(queryText);
+  const compactQuery = normalizedQuery.replace(/\s+/g, "");
+  if (!normalizedQuery.trim() || normalizedQuery.length < 2) return 0;
+
+  const slug = normalizeTargetCategory(target.category);
+  const slugFlat = slug.replace(/_/g, "");
+  const option = TARGET_CATEGORY_OPTIONS.find((item) => item.value === slug) || TARGET_CATEGORY_OPTIONS[0];
+
+  let best = 0;
+
+  best = Math.max(best, fuzzy(normalizedQuery, option.labelEn) - 10);
+  best = Math.max(best, fuzzy(normalizedQuery, option.labelAr) - 10);
+  best = Math.max(best, fuzzy(normalizedQuery, slug.replace(/_/g, " ")) - 14);
+  best = Math.max(best, fuzzy(normalizedQuery, slug.replace(/_/g, "")) - 22);
+
+  if (compactQuery.length >= 4) {
+    if (compactQuery === slugFlat || slugFlat.includes(compactQuery) || compactQuery.includes(slugFlat)) best = Math.max(best, 97);
+    for (const piece of slug.split("_").filter((p) => p.length >= 4)) {
+      const pieceCompact = normalizeTargetName(piece).replace(/\s+/g, "");
+      if (!pieceCompact) continue;
+      if (compactQuery.includes(pieceCompact) || pieceCompact.includes(compactQuery)) best = Math.max(best, Math.min(95, 80 + compactQuery.length));
+      best = Math.max(best, fuzzy(normalizedQuery, piece) - 18);
+    }
+  }
+
+  return best >= 55 ? Math.min(best, 99) : 0;
+}
+
 export function getTargetReasonOption(value: string) {
   return TARGET_REASON_OPTIONS.find((option) => option.value === value);
 }
@@ -360,6 +457,7 @@ export function targetPayload(input: {
   reportCount: number;
   claimedByUserId: string;
   reasons?: string[];
+  category?: string;
   createdAt?: number;
 }) {
   const phones = input.phones.map(normalizePhone).filter(Boolean);
@@ -372,6 +470,7 @@ export function targetPayload(input: {
   const now = Date.now();
   const reasons = normalizeTargetReasons(input.reasons);
   const aliases = normalizeTargetAliases(input.aliases);
+  const category = normalizeTargetCategory(input.category);
 
   return {
     name: input.name.trim(),
@@ -386,8 +485,9 @@ export function targetPayload(input: {
     trustScore: Number(input.trustScore),
     reportCount: Number(input.reportCount),
     reasons,
+    category,
     claimedByUserId: input.claimedByUserId.trim() || null,
-    searchTerms: generateSearchTerms(input.name, phones, links, aliases),
+    searchTerms: [...generateSearchTerms(input.name, phones, links, aliases), category],
     createdAt: input.createdAt || now,
     updatedAt: now,
   };

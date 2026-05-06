@@ -1,11 +1,15 @@
 "use client";
 
 import { Navbar } from "@/components/Navbar";
+import { showRouteLoader } from "@/components/RouteLoadingController";
 import { AuthContext } from "@/lib/providers";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, Link as LinkIcon, Loader2, Save, ShieldCheck, UploadCloud } from "lucide-react";
+import { Image as ImageIcon, LayoutDashboard, Link as LinkIcon, Loader2, Save, ShieldCheck, UploadCloud } from "lucide-react";
 import { motion } from "motion/react";
 import { useLanguage } from "@/lib/i18n/context";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { isAdminUser } from "@/lib/auth-user";
 import { collection, doc, getDocs, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -13,7 +17,9 @@ import { getAvatarUrl } from "@/lib/avatar";
 
 export default function ProfilePage() {
   const { user, loading } = useContext(AuthContext);
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
+  const router = useRouter();
+  const isAdmin = isAdminUser(user);
   const [reports, setReports] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
@@ -26,6 +32,10 @@ export default function ProfilePage() {
   useEffect(() => {
     setAvatarUrl(user?.photoURL || "");
   }, [user?.photoURL]);
+
+  useEffect(() => {
+    if (isAdmin) router.prefetch("/dashboard");
+  }, [router, isAdmin]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -193,6 +203,36 @@ export default function ProfilePage() {
             <span>{lang === "ar" ? "عضو موثوق - مستوى الثقة: متوسط" : "Trusted member - trust level: medium"}</span>
           </div>
         </motion.div>
+
+        {isAdmin && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.06 }}
+            className="glass-panel mb-6 rounded-3xl border border-primary/25 bg-primary/[0.06] p-6 dark:border-neon-blue/30 dark:bg-neon-blue/[0.06]"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-start">
+                <p className="text-xs font-black uppercase tracking-wide text-muted-foreground">
+                  {lang === "ar" ? "إدارة المنصة" : "Platform administration"}
+                </p>
+                <p className="mt-1 text-lg font-black">
+                  {lang === "ar"
+                    ? "لوحة الإضافة والتحكم في الصفحات والبلاغات تظهر هنا فقط."
+                    : "Target management and moderation — available from your profile only."}
+                </p>
+              </div>
+              <Link
+                href="/dashboard"
+                onClick={showRouteLoader}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-black text-primary-foreground shadow-sm transition hover:bg-primary/90 dark:bg-neon-blue dark:text-black"
+              >
+                <LayoutDashboard className="h-5 w-5" />
+                <span>{t("navbar.dashboard", "Dashboard")}</span>
+              </Link>
+            </div>
+          </motion.div>
+        )}
 
         <div className="glass-panel p-8 rounded-3xl">
           <h2 className="text-xl font-bold mb-4">{lang === "ar" ? "نشاطك وبلاغاتك" : "Your activity and reports"}</h2>

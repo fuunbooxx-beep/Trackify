@@ -10,13 +10,16 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { useLanguage } from "@/lib/i18n/context";
 import {
+  evaluateTargetCategoryTextMatch,
   getStatusLabel,
   getTargetAliases,
+  getTargetCategoryLabel,
   getTargetHref,
   getTargetLinks,
   getTargetPhones,
   hostFromUrl,
   normalizePhone,
+  normalizeTargetCategory,
   normalizeTargetName,
   normalizeUrl,
   type TargetRecord,
@@ -128,6 +131,9 @@ function scoreTarget(queryText: string, target: TargetRecord) {
       else if (url.includes(linkQuery) || (compactQuery.length >= 3 && host.includes(normalizedQuery))) score = Math.max(score, 86);
     }
   }
+
+  const categoryBoost = evaluateTargetCategoryTextMatch(queryText, target, fuzzyScore);
+  if (categoryBoost > 0) score = Math.max(score, categoryBoost);
 
   return score;
 }
@@ -265,9 +271,12 @@ function TargetCard({ target }: { target: any }) {
     <Link href={getTargetHref(target)} className="block">
       <div className={`glass-panel p-6 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-l-4 transition-all hover:scale-[1.01] ${borderClass}`}>
         <div>
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
             <h3 className="text-xl font-bold">{target.name}</h3>
             <span className="text-xs font-bold px-2 py-1 bg-secondary rounded-md uppercase tracking-wider">{target.type}</span>
+            <span className="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-black text-primary dark:text-neon-blue">
+              {getTargetCategoryLabel(normalizeTargetCategory(target.category), lang)}
+            </span>
           </div>
           <div className="flex gap-4 text-sm text-muted-foreground font-medium">
             {target.phone && (

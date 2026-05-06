@@ -24,9 +24,13 @@ function ReportContent() {
   const router = useRouter();
   const { lang } = useLanguage();
   
-  const [targetName, setTargetName] = useState(searchParams.get("target") || "");
+  const presetTargetName = searchParams.get("target") || "";
+  const presetTargetLink = searchParams.get("link") || "";
+  const lockPreset = searchParams.get("lock") === "1";
+
+  const [targetName, setTargetName] = useState(presetTargetName);
   const [targetPhone, setTargetPhone] = useState("");
-  const [targetLink, setTargetLink] = useState("");
+  const [targetLink, setTargetLink] = useState(presetTargetLink);
   const [category, setCategory] = useState("scam");
   const [description, setDescription] = useState("");
   const [reportAsAdmin, setReportAsAdmin] = useState(false);
@@ -37,6 +41,14 @@ function ReportContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const nextAfterAuth = useMemo(() => {
+    const params = new URLSearchParams();
+    if (presetTargetName) params.set("target", presetTargetName);
+    if (presetTargetLink) params.set("link", presetTargetLink);
+    if (lockPreset) params.set("lock", "1");
+    const query = params.toString();
+    return `/report${query ? `?${query}` : ""}`;
+  }, [lockPreset, presetTargetLink, presetTargetName]);
   const supabase = useMemo(() => {
     try {
       return createSupabaseBrowserClient();
@@ -243,7 +255,7 @@ function ReportContent() {
           <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-4">{lang === "ar" ? "لازم تسجل دخول الأول!" : "You need to sign in first!"}</h2>
           <p className="text-muted-foreground mb-8">{lang === "ar" ? "عشان نتحقق من صحة البلاغات ونمنع السبام، لازم تسجّل دخول بحسابك (Trackify عبر Supabase)." : "To verify reports and prevent spam, please sign in with your account."}</p>
-          <Link href={`/auth?next=${encodeURIComponent(`/report${targetName ? `?target=${encodeURIComponent(targetName)}` : ""}`)}`} className="inline-flex bg-primary dark:bg-neon-blue text-white dark:text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition-transform">
+          <Link href={`/auth?next=${encodeURIComponent(nextAfterAuth)}`} className="inline-flex bg-primary dark:bg-neon-blue text-white dark:text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition-transform">
             {lang === "ar" ? "تسجيل الدخول للاستمرار" : "Sign in to continue"}
           </Link>
         </div>
@@ -271,6 +283,20 @@ function ReportContent() {
               </span>
             </div>
           )}
+
+          {lockPreset && (presetTargetName || presetTargetLink) && (
+            <div className="bg-primary/10 border border-primary/25 text-foreground p-4 rounded-xl flex items-start gap-3 font-semibold dark:bg-neon-blue/10 dark:border-neon-blue/25">
+              <AlertCircle className="w-5 h-5 shrink-0 text-primary dark:text-neon-blue" />
+              <div className="space-y-1">
+                <p className="font-black">{lang === "ar" ? "الصفحة محددة تلقائياً" : "Target preselected"}</p>
+                <p className="text-sm text-muted-foreground font-medium">
+                  {lang === "ar"
+                    ? "اسم الصفحة واللينك جايين من صفحة الهدف، ومقفولين لتسهيل كتابة البلاغ."
+                    : "The target name and link were filled from the target page and locked to save your time."}
+                </p>
+              </div>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
@@ -280,7 +306,8 @@ function ReportContent() {
                 required
                 value={targetName}
                 onChange={(e) => setTargetName(e.target.value)}
-                className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue transition-shadow font-medium"
+                disabled={lockPreset && Boolean(presetTargetName)}
+                className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue transition-shadow font-medium disabled:opacity-70"
                 placeholder="مثال: Ahmed Store"
               />
             </div>
@@ -317,7 +344,8 @@ function ReportContent() {
                 type="url"
                 value={targetLink}
                 onChange={(e) => setTargetLink(e.target.value)}
-                className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue transition-shadow font-medium text-left dir-ltr placeholder:text-right"
+                disabled={lockPreset && Boolean(presetTargetLink)}
+                className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue transition-shadow font-medium text-left dir-ltr placeholder:text-right disabled:opacity-70"
                 placeholder="https://facebook.com/..."
                 dir="ltr"
               />
