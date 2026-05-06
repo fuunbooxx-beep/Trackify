@@ -1,13 +1,111 @@
 "use client";
 
 import { Navbar } from "@/components/Navbar";
-import { useContext, useState, Suspense } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { AuthContext } from "@/lib/providers";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useSearchParams } from "next/navigation";
 import { Loader2, LogIn, UserPlus } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 import { assignWithRouteLoader, hideRouteLoader, showRouteLoader } from "@/components/RouteLoadingController";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          callback?: (token: string) => void;
+          "expired-callback"?: () => void;
+          "error-callback"?: () => void;
+          action?: string;
+          cData?: string;
+          theme?: "light" | "dark" | "auto";
+        }
+      ) => string;
+      reset?: (widgetId?: string) => void;
+      remove?: (widgetId?: string) => void;
+    };
+  }
+}
+
+function TurnstileCaptcha({
+  onToken,
+  onError,
+}: {
+  onToken: (token: string) => void;
+  onError: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+  useEffect(() => {
+    if (!siteKey) return;
+
+    const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile="1"]');
+    if (existing) return;
+
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.dataset.turnstile = "1";
+    document.head.appendChild(script);
+  }, [siteKey]);
+
+  useEffect(() => {
+    if (!siteKey) return;
+    if (!containerRef.current) return;
+
+    let cancelled = false;
+    const tryRender = () => {
+      if (cancelled) return;
+      if (!containerRef.current) return;
+
+      const ts = window.turnstile;
+      if (!ts?.render) {
+        window.setTimeout(tryRender, 150);
+        return;
+      }
+
+      if (widgetIdRef.current) {
+        ts.remove?.(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
+
+      const id = ts.render(containerRef.current, {
+        sitekey: siteKey,
+        theme: "auto",
+        callback: (token) => onToken(token),
+        "expired-callback": () => onToken(""),
+        "error-callback": () => {
+          onToken("");
+          onError();
+        },
+      });
+      widgetIdRef.current = id;
+    };
+
+    tryRender();
+    return () => {
+      cancelled = true;
+      const ts = window.turnstile;
+      if (widgetIdRef.current) ts?.remove?.(widgetIdRef.current);
+      widgetIdRef.current = null;
+    };
+  }, [siteKey, onToken, onError]);
+
+  if (!siteKey) return null;
+
+  return (
+    <div className="mt-2">
+      <div ref={containerRef} />
+    </div>
+  );
+}
 
 function AuthForm() {
   const { user, loading } = useContext(AuthContext);
@@ -24,6 +122,14 @@ function AuthForm() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaBroken, setCaptchaBroken] = useState(false);
+
+  const captchaEnabled = useMemo(
+    () => Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
+    []
+  );
+  const needCaptcha = captchaEnabled;
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +141,11 @@ function AuthForm() {
     }
     if (isRegister && !name.trim()) {
       setErrorMsg(lang === "ar" ? "اكتب اسمك الأول." : "Enter your name.");
+      return;
+    }
+
+    if (needCaptcha && !captchaToken) {
+      setErrorMsg(lang === "ar" ? "كمّل اختبار التحقق (CAPTCHA) الأول." : "Please complete the CAPTCHA first.");
       return;
     }
 
@@ -51,6 +162,7 @@ function AuthForm() {
               display_name: name.trim(),
             },
             emailRedirectTo: `${window.location.origin}/auth/callback`,
+            captchaToken: needCaptcha ? captchaToken : undefined,
           },
         });
         if (error) throw error;
@@ -63,20 +175,37 @@ function AuthForm() {
         const { error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
+          options: {
+            captchaToken: needCaptcha ? captchaToken : undefined,
+          },
         });
         if (error) throw error;
         assignWithRouteLoader(safeNextPath);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      // Keep a visible (but non-sensitive) message to debug production auth failures.
+      // Supabase returns many helpful 4xx messages that we can safely surface.
       if (/invalid login credentials|invalid_credentials/i.test(message)) {
         setErrorMsg(lang === "ar" ? "الإيميل أو الباسورد غير صحيح." : "Invalid email or password.");
+      } else if (/email not confirmed|not_confirmed/i.test(message)) {
+        setErrorMsg(lang === "ar" ? "لازم تأكد الإيميل الأول. افتح رسالة التأكيد ثم جرّب تسجيل الدخول." : "Please confirm your email first, then sign in.");
       } else if (/user already registered|already been registered/i.test(message)) {
         setErrorMsg(lang === "ar" ? "الإيميل مستخدم بالفعل." : "Email is already registered.");
       } else if (/password|weak/i.test(message)) {
         setErrorMsg(lang === "ar" ? "الباسورد ضعيف جدًا. جرّب 8 أحرف أو أكثر." : "Password is too weak. Try 8+ characters.");
+      } else if (/captcha|turnstile|hcaptcha/i.test(message)) {
+        setErrorMsg(
+          lang === "ar"
+            ? "Supabase طالب CAPTCHA للإيميل/باسورد. لو لسه شغال، كمل التحقق وجرب تاني. لو مش ظاهر، اتأكد إن NEXT_PUBLIC_TURNSTILE_SITE_KEY مضبوط."
+            : "Supabase requires CAPTCHA for email/password. Complete the challenge and try again. If it doesn't show, ensure NEXT_PUBLIC_TURNSTILE_SITE_KEY is set."
+        );
       } else {
-        setErrorMsg(lang === "ar" ? "حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى." : "Sign-in failed. Please try again.");
+        setErrorMsg(
+          lang === "ar"
+            ? `فشل تسجيل الدخول/إنشاء الحساب: ${message}`
+            : `Auth failed: ${message}`
+        );
       }
     } finally {
       setSubmitting(false);
@@ -178,6 +307,25 @@ function AuthForm() {
                 dir="ltr"
                 className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary"
               />
+
+              {needCaptcha && (
+                <>
+                  <TurnstileCaptcha
+                    onToken={(token) => {
+                      setCaptchaBroken(false);
+                      setCaptchaToken(token);
+                    }}
+                    onError={() => setCaptchaBroken(true)}
+                  />
+                  {captchaBroken && (
+                    <div className="text-xs font-semibold text-destructive">
+                      {lang === "ar"
+                        ? "تعذر تحميل CAPTCHA. جرّب تحديث الصفحة أو اتأكد من مفتاح Turnstile."
+                        : "Failed to load CAPTCHA. Refresh the page or verify your Turnstile site key."}
+                    </div>
+                  )}
+                </>
+              )}
 
               <button
                 type="submit"
