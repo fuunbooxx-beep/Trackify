@@ -1,6 +1,28 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const RESERVED_ROOT_ROUTES = new Set([
+  "",
+  "about",
+  "api",
+  "auth",
+  "category",
+  "dashboard",
+  "profile",
+  "report",
+  "search",
+  "target",
+  "trending",
+]);
+
+function resolveTargetRewrite(pathname: string) {
+  const clean = pathname.replace(/^\/+|\/+$/g, "");
+  if (!clean || clean.includes("/")) return null;
+  if (RESERVED_ROOT_ROUTES.has(clean.toLowerCase())) return null;
+  if (clean.includes(".")) return null;
+  return `/target/${clean}`;
+}
+
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -35,7 +57,16 @@ export async function middleware(request: NextRequest) {
 
   await supabase.auth.getUser();
 
-  return supabaseResponse;
+  const rewritePath = resolveTargetRewrite(request.nextUrl.pathname);
+  if (!rewritePath) return supabaseResponse;
+
+  const rewriteUrl = request.nextUrl.clone();
+  rewriteUrl.pathname = rewritePath;
+  const rewrittenResponse = NextResponse.rewrite(rewriteUrl);
+  supabaseResponse.cookies.getAll().forEach((cookie) => {
+    rewrittenResponse.cookies.set(cookie.name, cookie.value);
+  });
+  return rewrittenResponse;
 }
 
 export const config = {

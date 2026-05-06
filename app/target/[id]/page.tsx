@@ -49,6 +49,7 @@ import {
   hostFromUrl,
   normalizeTargetCategory,
   platformLabel,
+  slugifyTargetName,
   type TargetRecord,
 } from "@/lib/target-utils";
 import { useLanguage } from "@/lib/i18n/context";
@@ -59,7 +60,8 @@ import { syncTargetStats } from "@/lib/trust-score";
 
 export default function TargetDetailsPage() {
   const params = useParams();
-  const targetId = extractTargetIdFromSlug(params.id as string);
+  const routeToken = String(params.id || "");
+  const targetId = extractTargetIdFromSlug(routeToken);
   const { user } = useContext(AuthContext);
   const isAdmin = isAdminUser(user);
   const [target, setTarget] = useState<TargetRecord | null>(null);
@@ -83,14 +85,27 @@ export default function TargetDetailsPage() {
   const [savingAdminReplyId, setSavingAdminReplyId] = useState<string | null>(null);
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState("");
+  const [showManualReportForm, setShowManualReportForm] = useState(false);
+  const [manualReporterName, setManualReporterName] = useState("");
+  const [manualCategory, setManualCategory] = useState("scam");
+  const [manualDescription, setManualDescription] = useState("");
+  const [manualTargetPhone, setManualTargetPhone] = useState("");
+  const [manualTargetLink, setManualTargetLink] = useState("");
+  const [manualFiles, setManualFiles] = useState<File[]>([]);
+  const [manualPreviews, setManualPreviews] = useState<string[]>([]);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title: string } | null>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const adminCommentFileInputRef = useRef<HTMLInputElement>(null);
+  const manualFileInputRef = useRef<HTMLInputElement>(null);
   const { lang } = useLanguage();
+  const activeTargetId = String(target?.id || targetId);
 
-  const fetchReports = async () => {
+  const fetchReports = async (overrideTargetId?: string) => {
+    const resolvedTargetId = String(overrideTargetId || target?.id || targetId);
+    if (!resolvedTargetId) return;
     const reportsRef = collection(db, "reports");
-    const reportsQuery = query(reportsRef, where("targetId", "==", targetId));
+    const reportsQuery = query(reportsRef, where("targetId", "==", resolvedTargetId));
     const reportsSnap = await getDocs(reportsQuery);
     setReports(
       reportsSnap.docs
@@ -105,12 +120,12 @@ export default function TargetDetailsPage() {
   };
 
   const refreshTargetAfterReportChange = async () => {
-    await syncTargetStats(db, targetId);
-    const targetSnap = await getDoc(doc(db, "targets", targetId));
+    await syncTargetStats(db, activeTargetId);
+    const targetSnap = await getDoc(doc(db, "targets", activeTargetId));
     if (targetSnap.exists()) {
       setTarget({ id: targetSnap.id, ...targetSnap.data() } as TargetRecord);
     }
-    await fetchReports();
+    await fetchReports(activeTargetId);
   };
 
   useEffect(() => {
@@ -121,9 +136,20 @@ export default function TargetDetailsPage() {
 
         if (docSnap.exists()) {
           setTarget({ id: docSnap.id, ...docSnap.data() } as TargetRecord);
-          await fetchReports();
+          await fetchReports(docSnap.id);
         } else {
-          setTarget(null);
+          const slugToken = decodeURIComponent(routeToken || "").trim().toLowerCase();
+          const allTargetsSnap = await getDocs(collection(db, "targets"));
+          const matchedTarget = allTargetsSnap.docs
+            .map((item) => ({ id: item.id, ...item.data() } as TargetRecord))
+            .find((item) => slugifyTargetName(String(item.name || "")) === slugToken);
+
+          if (matchedTarget) {
+            setTarget(matchedTarget);
+            await fetchReports(String(matchedTarget.id || ""));
+          } else {
+            setTarget(null);
+          }
         }
       } catch (error) {
         console.error(error);
@@ -133,7 +159,7 @@ export default function TargetDetailsPage() {
     };
 
     fetchDetails();
-  }, [targetId]);
+  }, [targetId, routeToken]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -208,6 +234,8 @@ export default function TargetDetailsPage() {
   const categoryLabel = getTargetCategoryLabel(categorySlug, lang);
   const targetReasons = getTargetReasons(target);
   const reportCount = Number(target.reportCount ?? 0);
+  const missingPhones = phones.length === 0;
+  const missingLinks = links.length === 0;
   const isDealNotRecommended = reportCount >= 3;
   const isNoData = target.status === "no_data";
   const isHighRisk = target.status === "high_risk";
@@ -333,12 +361,12 @@ export default function TargetDetailsPage() {
         patch.editRequestPending = false;
       }
       await updateDoc(doc(db, "reports", report.id), patch);
-      await syncTargetStats(db, targetId);
+      await syncTargetStats(db, activeTargetId);
       editNewPreviews.forEach((url) => URL.revokeObjectURL(url));
       setEditNewFiles([]);
       setEditNewPreviews([]);
       setEditingReportId(null);
-      const targetSnap = await getDoc(doc(db, "targets", targetId));
+      const targetSnap = await getDoc(doc(db, "targets", activeTargetId));
       if (targetSnap.exists()) {
         setTarget({ id: targetSnap.id, ...targetSnap.data() } as TargetRecord);
       }
@@ -531,7 +559,7 @@ export default function TargetDetailsPage() {
       for (let i = 0; i < adminCommentFiles.length; i += 1) {
         const file = adminCommentFiles[i];
         const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-        const filePath = `${user.uid}/admin_comment_${targetId}_${Date.now()}_${i}_${safeName}`;
+      const filePath = `${user.uid}/admin_comment_${activeTargetId}_${Date.now()}_${i}_${safeName}`;
         const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
           upsert: false,
           contentType: file.type,
@@ -543,7 +571,7 @@ export default function TargetDetailsPage() {
 
       // Keep only one pinned item by unpinning previous pinned comments first.
       const pinnedSnap = await getDocs(
-        query(collection(db, "reports"), where("targetId", "==", targetId), where("status", "==", "approved"), where("adminPinned", "==", true))
+        query(collection(db, "reports"), where("targetId", "==", activeTargetId), where("status", "==", "approved"), where("adminPinned", "==", true))
       );
       for (const item of pinnedSnap.docs) {
         await updateDoc(doc(db, "reports", item.id), { adminPinned: false, updatedAt: Date.now() });
@@ -551,7 +579,7 @@ export default function TargetDetailsPage() {
 
       const adminEvidenceTier = classifyEvidenceTier(uploadedImageUrls.length, adminCommentText.trim());
       await addDoc(collection(db, "reports"), {
-        targetId,
+        targetId: activeTargetId,
         authorId: user.uid,
         authorEmail: user.email || "",
         reporterName: "Trackify",
@@ -572,8 +600,8 @@ export default function TargetDetailsPage() {
         createdAt: Date.now(),
         reviewedAt: Date.now(),
       });
-      await syncTargetStats(db, targetId);
-      const tSnap = await getDoc(doc(db, "targets", targetId));
+      await syncTargetStats(db, activeTargetId);
+      const tSnap = await getDoc(doc(db, "targets", activeTargetId));
       if (tSnap.exists()) {
         setTarget({ id: tSnap.id, ...tSnap.data() } as TargetRecord);
       }
@@ -591,6 +619,101 @@ export default function TargetDetailsPage() {
       setActionMsg(lang === "ar" ? "تعذر إضافة التعليق الموثق." : "Failed to add verified comment.");
     } finally {
       setCreatingAdminComment(false);
+    }
+  };
+
+  const handleManualFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files ?? []);
+    if (!selected.length) return;
+    const imageOnly = selected.filter((file) => file.type.startsWith("image/"));
+    const maxAllowed = 10;
+    const remaining = Math.max(0, maxAllowed - manualFiles.length);
+    if (remaining <= 0) {
+      setActionMsg(lang === "ar" ? "وصلت للحد الأقصى (10 صور)." : "Maximum reached (10 images).");
+      event.target.value = "";
+      return;
+    }
+    const accepted = imageOnly.slice(0, remaining);
+    setManualFiles((prev) => [...prev, ...accepted]);
+    setManualPreviews((prev) => [...prev, ...accepted.map((file) => URL.createObjectURL(file))]);
+    event.target.value = "";
+  };
+
+  const removeManualImage = (index: number) => {
+    setManualFiles((prev) => prev.filter((_, i) => i !== index));
+    setManualPreviews((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed) URL.revokeObjectURL(removed);
+      return next;
+    });
+  };
+
+  const submitManualReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin || !user || !target) return;
+    if (!manualDescription.trim()) {
+      setActionMsg(lang === "ar" ? "اكتب وصف البلاغ أولًا." : "Please enter report description first.");
+      return;
+    }
+
+    try {
+      setManualSubmitting(true);
+      setActionMsg("");
+      const supabase = createSupabaseBrowserClient();
+      const uploadedImageUrls: string[] = [];
+      for (let i = 0; i < manualFiles.length; i += 1) {
+        const file = manualFiles[i];
+        const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
+      const filePath = `${user.uid}/manual_target_${activeTargetId}_${Date.now()}_${i}_${safeName}`;
+        const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
+          upsert: false,
+          contentType: file.type,
+        });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from("report-evidence").getPublicUrl(filePath);
+        uploadedImageUrls.push(data.publicUrl);
+      }
+
+      await addDoc(collection(db, "reports"), {
+        targetId: activeTargetId,
+        authorId: user.uid,
+        authorEmail: user.email || "",
+        reporterName: manualReporterName.trim() || "Manual Entry",
+        source: "admin_manual",
+        targetName: String(target.name || ""),
+        targetPhone: manualTargetPhone.trim(),
+        targetLink: manualTargetLink.trim(),
+        category: manualCategory,
+        description: manualDescription.trim(),
+        evidenceImages: uploadedImageUrls,
+        evidenceTier: classifyEvidenceTier(uploadedImageUrls.length, manualDescription.trim()),
+        status: "approved",
+        adminVerified: false,
+        adminPinned: false,
+        allowUserEdit: false,
+        editRequestPending: false,
+        reviewNote: "",
+        createdAt: Date.now(),
+        reviewedAt: Date.now(),
+      });
+
+      await refreshTargetAfterReportChange();
+      manualPreviews.forEach((url) => URL.revokeObjectURL(url));
+      setManualReporterName("");
+      setManualCategory("scam");
+      setManualDescription("");
+      setManualTargetPhone("");
+      setManualTargetLink("");
+      setManualFiles([]);
+      setManualPreviews([]);
+      setShowManualReportForm(false);
+      setActionMsg(lang === "ar" ? "تمت إضافة البلاغ اليدوي بنجاح." : "Manual report added successfully.");
+    } catch (error) {
+      console.error(error);
+      setActionMsg(lang === "ar" ? "تعذر إضافة البلاغ اليدوي." : "Failed to add manual report.");
+    } finally {
+      setManualSubmitting(false);
     }
   };
 
@@ -649,11 +772,11 @@ export default function TargetDetailsPage() {
                   <p className="mx-auto max-w-3xl text-sm leading-7 text-muted-foreground md:text-base sm:mx-0">
                     {isNoData
                       ? (lang === "ar"
-                          ? "لا توجد بيانات أو بلاغات معتمدة كفاية لعرض تقييم واضح لهذه الصفحة حتى الآن."
-                          : "There is not enough approved data yet to show a meaningful trust profile for this page.")
+                          ? "لا توجد بيانات أو بلاغات موثقة كفاية لعرض تقييم واضح لهذه الصفحة حتى الآن."
+                          : "There is not enough verified data yet to show a meaningful trust profile for this page.")
                       : (lang === "ar"
-                          ? "ملخص سريع لبيانات الصفحة والبلاغات المعتمدة المرتبطة بها، مع مؤشرات الثقة وآخر النشاط."
-                          : "A quick summary of this page, its approved reports, and recent trust activity signals.")}
+                          ? "ملخص سريع لبيانات الصفحة والبلاغات الموثقة المرتبطة بها، مع مؤشرات الثقة وآخر النشاط."
+                          : "A quick summary of this page, its verified reports, and recent trust activity signals.")}
                   </p>
 
                   <div
@@ -737,6 +860,30 @@ export default function TargetDetailsPage() {
                       </div>
 
                       <div className="space-y-4">
+                        {(missingPhones || missingLinks) && (
+                          <div className="space-y-2">
+                            {missingLinks && (
+                              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                                {lang === "ar"
+                                  ? "⚠️ لم يتم العثور على رابط رسمي لهذه الصفحة."
+                                  : "⚠️ No official page link was found for this target."}
+                              </p>
+                            )}
+                            {missingPhones && (
+                              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                                {lang === "ar"
+                                  ? "⚠️ لم يتم العثور على رقم هاتف موثوق لهذه الصفحة."
+                                  : "⚠️ No verified phone number was found for this target."}
+                              </p>
+                            )}
+                            <p className="text-sm leading-7 text-amber-900/90 dark:text-amber-100/90">
+                              {lang === "ar"
+                                ? "البلاغات مرتبطة بالاسم والأدلة/الصور المتوفرة فقط حاليًا. عند توفير البيانات الناقصة (رقم أو رابط)، سيتم تحديث الصفحة فورًا."
+                                : "Reports are currently linked using the target name and available evidence/images only. Once missing data (phone or link) is provided, this page will be updated immediately."}
+                            </p>
+                          </div>
+                        )}
+
                         {phones.length > 0 && (
                           <InfoGroup title={lang === "ar" ? "أرقام الهاتف" : "Phone numbers"}>
                             {phones.map((phone) => (
@@ -774,7 +921,7 @@ export default function TargetDetailsPage() {
 
                     <div className="grid gap-3">
                       <CompactStatCard
-                        label={lang === "ar" ? "البلاغات المعتمدة" : "Approved reports"}
+                        label={lang === "ar" ? "البلاغات الموثقة" : "Verified reports"}
                         value={Number(target.reportCount ?? 0)}
                         tone="neutral"
                       />
@@ -803,7 +950,7 @@ export default function TargetDetailsPage() {
 
                 <div className="rounded-3xl border border-border/70 bg-background/70 p-4 shadow-sm dark:bg-slate-950/35 dark:border-slate-800/60">
                   <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    {lang === "ar" ? "مستوى الثقة" : "Trust Score"}
+                    {lang === "ar" ? "مستوى الأمان" : "Trust Score"}
                   </p>
                   {isNoData ? (
                     <p className={`mt-2 text-2xl md:text-3xl font-black tracking-normal ${statusClass}`}>
@@ -827,13 +974,13 @@ export default function TargetDetailsPage() {
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {lang === "ar"
-                      ? "التقييم الحالي محسوب من البلاغات المعتمدة، قوة الأدلة، وحداثة النشاط."
-                      : "This score is based on approved reports, evidence quality, and recency."}
+                      ? "التقييم الحالي محسوب من البلاغات الموثقة، قوة الأدلة، وحداثة النشاط."
+                      : "This score is based on verified reports, evidence quality, and recency."}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 md:gap-3">
-                  <Metric label={lang === "ar" ? "بلاغات معتمدة" : "Approved reports"} value={Number(target.reportCount ?? 0)} />
+                  <Metric label={lang === "ar" ? "بلاغات موثقة" : "Verified reports"} value={Number(target.reportCount ?? 0)} />
                   <Metric
                     label={lang === "ar" ? "نسبة النجاح" : "Success ratio"}
                     value={isNoData ? "—" : successRatioPct != null ? `${successRatioPct}%` : "—"}
@@ -857,6 +1004,22 @@ export default function TargetDetailsPage() {
                       <Pencil className="w-4 h-4" />
                       {lang === "ar" ? "تعديل البيانات" : "Edit target"}
                     </Link>
+                  )}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setShowManualReportForm((prev) => !prev)}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background/80 px-4 py-3 text-sm font-black transition hover:-translate-y-0.5 hover:bg-background"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      {showManualReportForm
+                        ? lang === "ar"
+                          ? "إخفاء البلاغ اليدوي"
+                          : "Hide manual report form"
+                        : lang === "ar"
+                          ? "إضافة بلاغ يدوي"
+                          : "Add manual report"}
+                    </button>
                   )}
                   <Link
                     href={`/report?target=${encodeURIComponent(target.name || "")}&link=${encodeURIComponent(links[0]?.url || "")}&lock=1`}
@@ -883,6 +1046,103 @@ export default function TargetDetailsPage() {
                 : "Read experiences and evidence before you decide."}
             </p>
           </div>
+
+          {isAdmin && showManualReportForm && (
+            <form onSubmit={submitManualReport} className="mb-6 rounded-2xl border border-border bg-background/60 p-4 space-y-3">
+              <p className="text-sm font-black">
+                {lang === "ar" ? "إضافة بلاغ يدوي (نيابة عن عميل)" : "Add manual report (on behalf of customer)"}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  value={target.name || ""}
+                  readOnly
+                  className="input opacity-85"
+                  placeholder={lang === "ar" ? "اسم الصفحة" : "Target name"}
+                />
+                <input
+                  value={manualReporterName}
+                  onChange={(e) => setManualReporterName(e.target.value)}
+                  className="input"
+                  placeholder={lang === "ar" ? "اسم العميل (اختياري)" : "Customer name (optional)"}
+                />
+                <input
+                  value={manualTargetPhone}
+                  onChange={(e) => setManualTargetPhone(e.target.value)}
+                  className="input"
+                  dir="ltr"
+                  placeholder={lang === "ar" ? "رقم الهاتف (اختياري)" : "Phone number (optional)"}
+                />
+                <input
+                  value={manualTargetLink}
+                  onChange={(e) => setManualTargetLink(e.target.value)}
+                  className="input"
+                  dir="ltr"
+                  placeholder={lang === "ar" ? "رابط الصفحة (اختياري)" : "Page link (optional)"}
+                />
+                <select
+                  value={manualCategory}
+                  onChange={(e) => setManualCategory(e.target.value)}
+                  className="input md:col-span-2"
+                >
+                  <option value="scam">{lang === "ar" ? "نصب وسرقة" : "Scam and theft"}</option>
+                  <option value="delay">{lang === "ar" ? "تأخير متعمد" : "Intentional delay"}</option>
+                  <option value="bad_treatment">{lang === "ar" ? "سوء معاملة" : "Bad treatment"}</option>
+                  <option value="successful_transaction">{lang === "ar" ? "تجربة ناجحة" : "Successful transaction"}</option>
+                </select>
+              </div>
+              <textarea
+                value={manualDescription}
+                onChange={(e) => setManualDescription(e.target.value)}
+                className="input min-h-[120px]"
+                placeholder={lang === "ar" ? "اكتب وصف البلاغ..." : "Write report description..."}
+                required
+              />
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-muted-foreground">
+                  {lang === "ar" ? "صور مرفقة (حتى 10 صور)" : "Attached images (up to 10)"}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {manualPreviews.map((img, i) => (
+                    <div key={`manual-img-${i}`} className="relative">
+                      <img src={img} alt="Evidence" className="w-16 h-16 rounded-lg border border-border object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeManualImage(i)}
+                        className="absolute -top-1 -right-1 rounded-full bg-black/80 text-white text-[10px] w-4 h-4"
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+                  {manualPreviews.length < 10 && (
+                    <button
+                      type="button"
+                      onClick={() => manualFileInputRef.current?.click()}
+                      className="w-16 h-16 rounded-lg border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={manualFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleManualFilesSelected}
+                  className="hidden"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={manualSubmitting}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-bold hover:bg-primary/90 disabled:opacity-60 dark:bg-neon-blue dark:text-black"
+              >
+                {manualSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                <span>{lang === "ar" ? "إضافة البلاغ اليدوي" : "Add manual report"}</span>
+              </button>
+            </form>
+          )}
 
           {isAdmin && (
             <form onSubmit={createAdminVerifiedComment} className="mb-6 rounded-2xl border border-border bg-background/60 p-4 space-y-3">

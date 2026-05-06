@@ -6,7 +6,7 @@ import { AuthContext } from "@/lib/providers";
 import { isAdminUser } from "@/lib/auth-user";
 import { db } from "@/lib/firebase";
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
@@ -814,10 +814,8 @@ export default function DashboardPage() {
             <Loader2 className="w-5 h-5 animate-spin" />
             <span>{lang === "ar" ? "جاري تحميل الحساب..." : "Loading account..."}</span>
           </div>
-        ) : !user ? (
-          <AccessMessage tone="warning" title={lang === "ar" ? "لازم تسجل دخول الأول" : "You need to sign in first"} text={lang === "ar" ? "ادخل بحسابك من زر تسجيل الدخول ثم افتح الصفحة مرة تانية." : "Sign in first, then open this page again."} />
-        ) : !isAdmin ? (
-          <AccessMessage tone="danger" title={lang === "ar" ? "غير مسموح بفتح لوحة الإضافة" : "Access denied"} text={lang === "ar" ? "هذه الصفحة متاحة لحسابات الإدارة فقط." : "This page is only available for admin accounts."} />
+        ) : !user || !isAdmin ? (
+          <UnauthorizedNotFound />
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
             <form onSubmit={handleSubmit} className="glass-panel rounded-3xl p-5 md:p-8 space-y-6">
@@ -1085,28 +1083,26 @@ export default function DashboardPage() {
                 </select>
               </div>
 
-              <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[620px] overflow-y-auto pr-1">
                 {filteredTargets.map((target) => (
-                  <div key={target.id} className="rounded-2xl border border-border bg-background/60 p-4">
-                    <div className="flex items-start justify-between gap-3">
+                  <div key={target.id} className="rounded-xl border border-border bg-background/50 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-black truncate">{target.name}</p>
-                        <p className="text-xs text-muted-foreground mt-1" dir="ltr">
+                        <p className="truncate text-sm font-black">{target.name}</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground" dir="ltr">
                           {target.id}
                         </p>
-                        <div className="mt-2">
-                          <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2 py-1 text-[11px] font-black text-primary dark:text-neon-blue">
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary dark:text-neon-blue">
                             {getTargetCategoryLabel(String(target.category || "gaming"), lang)}
                           </span>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          {getTargetPhones(target).slice(0, 2).map((phone) => (
-                            <span key={phone} className="rounded-full bg-secondary px-2 py-1" dir="ltr">
+                          {getTargetPhones(target).slice(0, 1).map((phone) => (
+                            <span key={phone} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground" dir="ltr">
                               {phone}
                             </span>
                           ))}
-                          {getTargetLinks(target).slice(0, 2).map((link) => (
-                            <span key={link.url} className="rounded-full bg-secondary px-2 py-1">
+                          {getTargetLinks(target).slice(0, 1).map((link) => (
+                            <span key={link.url} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
                               {platformLabel(link.platform)}
                             </span>
                           ))}
@@ -1115,10 +1111,10 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => target.id && applyTarget(target.id, target)}
-                        className="rounded-xl border border-border p-2 hover:bg-secondary"
+                        className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-bold hover:bg-secondary"
                         aria-label={lang === "ar" ? "تعديل" : "Edit"}
                       >
-                        <Pencil className="w-4 h-4" />
+                        {lang === "ar" ? "تعديل" : "Edit"}
                       </button>
                     </div>
                   </div>
@@ -1137,7 +1133,7 @@ export default function DashboardPage() {
           <section className="mt-8 glass-panel rounded-3xl p-5 md:p-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-black">
-                {lang === "ar" ? "التعليق المثبت والتوثيق (بلاغات معتمدة)" : "Pinned note & verification (approved reports)"}
+                {lang === "ar" ? "التعليق المثبت والتوثيق (بلاغات موثقة)" : "Pinned note & verification (verified reports)"}
               </h2>
               {approvedLoading && <Loader2 className="w-4 h-4 animate-spin" />}
             </div>
@@ -1147,7 +1143,7 @@ export default function DashboardPage() {
               </p>
             ) : approvedReports.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {lang === "ar" ? "لا توجد بلاغات معتمدة لهذا الهدف بعد." : "No approved reports for this target yet."}
+                {lang === "ar" ? "لا توجد بلاغات موثقة لهذا الهدف بعد." : "No verified reports for this target yet."}
               </p>
             ) : (
               <div className="space-y-4">
@@ -1634,6 +1630,11 @@ function AccessMessage({ tone, title, text }: { tone: "warning" | "danger"; titl
       </div>
     </div>
   );
+}
+
+function UnauthorizedNotFound() {
+  notFound();
+  return null;
 }
 
 function PlatformIcon({ platform, className }: { platform: string; className?: string }) {

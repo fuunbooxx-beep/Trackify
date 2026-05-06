@@ -85,7 +85,7 @@ function useTrendingTargets(status: string) {
 function PaginatedTrendList({ targets, tone }: { targets: TargetRecord[]; tone: "danger" | "safe" }) {
   const { lang } = useLanguage();
   const [page, setPage] = useState(0);
-  const pageSize = 3;
+  const pageSize = 4;
   const pageCount = Math.max(1, Math.ceil(targets.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
   const start = safePage * pageSize;
@@ -138,7 +138,7 @@ function PaginatedTrendList({ targets, tone }: { targets: TargetRecord[]; tone: 
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {visibleTargets.map((target, index) => (
           <TrendingCard key={target.id} target={target} rank={start + index + 1} tone={tone} />
         ))}
@@ -160,18 +160,18 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
 
   return (
     <Link href={getTargetHref(target)} className="group block">
-      <article className="trend-card relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10 dark:border-border dark:bg-card/85 sm:p-4">
+      <article className="trend-card relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10 dark:border-border dark:bg-card/85 sm:p-3">
         <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${topLine}`} />
-        <div className="flex items-start gap-3 sm:gap-4">
+        <div className="flex items-start gap-2.5 sm:gap-3">
           <div className="relative shrink-0">
-            <div className="trend-inner flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner dark:border-border sm:h-16 sm:w-16 sm:rounded-2xl">
+            <div className="trend-inner flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner dark:border-border sm:h-12 sm:w-12">
               {target.logoUrl ? (
                 <img src={target.logoUrl} alt={target.name || ""} className="h-full w-full object-cover" />
               ) : (
-                <Store className="h-6 w-6 text-slate-500 dark:text-muted-foreground sm:h-8 sm:w-8" />
+                <Store className="h-5 w-5 text-slate-500 dark:text-muted-foreground sm:h-6 sm:w-6" />
               )}
             </div>
-            <span className={`trend-inner absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-white text-[11px] font-black shadow-md dark:border-card sm:h-8 sm:w-8 sm:text-xs ${accentText}`}>
+            <span className={`trend-inner absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-white text-[10px] font-black shadow-md dark:border-card ${accentText}`}>
               {rank}
             </span>
           </div>
@@ -179,7 +179,7 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="truncate text-base font-black text-slate-950 transition group-hover:text-primary dark:text-foreground dark:group-hover:text-neon-blue sm:text-xl">
+                <h3 className="truncate text-sm font-black text-slate-950 transition group-hover:text-primary dark:text-foreground dark:group-hover:text-neon-blue sm:text-base">
                   {target.name}
                 </h3>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-black sm:gap-2 sm:text-xs">
@@ -192,12 +192,12 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
                   </span>
                 </div>
               </div>
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-500 transition group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary dark:border-border dark:text-muted-foreground dark:group-hover:text-neon-blue sm:h-9 sm:w-9">
-                <ArrowUpLeft className="h-4 w-4" />
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-500 transition group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary dark:border-border dark:text-muted-foreground dark:group-hover:text-neon-blue">
+                <ArrowUpLeft className="h-3.5 w-3.5" />
               </span>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 sm:gap-3">
+            <div className="mt-2.5 grid grid-cols-2 gap-2">
               <MiniStat
                 label={isDanger ? (lang === "ar" ? "البلاغات" : "Reports") : lang === "ar" ? "الثقة" : "Score"}
                 value={isDanger ? Number(target.reportCount || 0) : `${Number(target.trustScore || 0)}%`}
@@ -206,7 +206,7 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
               <MiniStat label={lang === "ar" ? "الروابط" : "Links"} value={links.length} tone={tone} />
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600 dark:text-slate-200">
+            <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-200">
               {phones[0] && (
                 <span className="trend-inner inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-border dark:bg-background" dir="ltr">
                   <Phone className="h-3.5 w-3.5" />
@@ -217,7 +217,7 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
                 <span className="trend-inner inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-border dark:bg-background">
                   <PlatformIcon platform={firstLink.platform} className="h-3.5 w-3.5 shrink-0" />
                   <span>{platformLabel(firstLink.platform)}</span>
-                  <span className="max-w-[140px] truncate" dir="ltr">
+                  <span className="max-w-[100px] truncate" dir="ltr">
                     {hostFromUrl(firstLink.url)}
                   </span>
                 </span>

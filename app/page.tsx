@@ -6,9 +6,66 @@ import { Particles } from "@/components/Particles";
 import { ShieldCheck, AlertTriangle, Users } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 import { motion } from "motion/react";
+import { collection, getDocs } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
+import { db } from "@/lib/firebase";
+import type { TargetRecord } from "@/lib/target-utils";
+
+type HomeStats = {
+  trustedSellers: number;
+  scammersDetected: number;
+  activeUsers: number;
+};
 
 export default function Home() {
   const { lang } = useLanguage();
+  const [stats, setStats] = useState<HomeStats>({
+    trustedSellers: 0,
+    scammersDetected: 0,
+    activeUsers: 0,
+  });
+
+  useEffect(() => {
+    let alive = true;
+
+    const fetchHomeStats = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, "targets"));
+        const targets = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as TargetRecord));
+
+        const trustedSellers = targets.filter((target) => String(target.status || "").toLowerCase() === "trusted").length;
+        const scammersDetected = targets.filter((target) => String(target.status || "").toLowerCase() === "high_risk").length;
+        const activeUsers = targets.reduce((sum, target) => sum + Number(target.reportCount || 0), 0);
+
+        if (alive) {
+          setStats({
+            trustedSellers,
+            scammersDetected,
+            activeUsers,
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    void fetchHomeStats();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const numberLocale = lang === "ar" ? "ar-EG" : "en-US";
+  const formattedStats = useMemo(
+    () => ({
+      trustedSellers: stats.trustedSellers.toLocaleString(numberLocale),
+      scammersDetected: stats.scammersDetected.toLocaleString(numberLocale),
+      activeUsers: stats.activeUsers.toLocaleString(numberLocale),
+    }),
+    [numberLocale, stats.activeUsers, stats.scammersDetected, stats.trustedSellers]
+  );
+
   return (
     <>
       <Particles />
@@ -33,19 +90,19 @@ export default function Home() {
             >
               <StatCard 
                 icon={<ShieldCheck className="h-10 w-10 text-green-500 sm:h-12 sm:w-12" />}
-                number="5"
+                number={formattedStats.trustedSellers}
                 label={lang === "ar" ? "بائع موثوق" : "Trusted seller"}
                 glowClass="glow-secure"
               />
               <StatCard 
                 icon={<AlertTriangle className="h-10 w-10 text-red-500 sm:h-12 sm:w-12" />}
-                number="2"
+                number={formattedStats.scammersDetected}
                 label={lang === "ar" ? "نصاب تم كشفه" : "Scammer detected"}
                 glowClass="glow-warning"
               />
               <StatCard 
                 icon={<Users className="h-10 w-10 text-primary dark:text-neon-blue sm:h-12 sm:w-12" />}
-                number="15"
+                number={formattedStats.activeUsers}
                 label={lang === "ar" ? "مستخدم نشط" : "Active users"}
                 glowClass="dark:glow-neon shadow-[0_0_15px_rgba(37,99,235,0.2)]"
               />

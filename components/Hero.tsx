@@ -2,7 +2,7 @@
 
 import { collection, getDocs, limit, query as firestoreQuery } from "firebase/firestore";
 import { Search, ShieldAlert } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
@@ -17,8 +17,10 @@ type PopularSearch = {
 export function Hero() {
   const [query, setQuery] = useState("");
   const [popularSearches, setPopularSearches] = useState<PopularSearch[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
   const { lang } = useLanguage();
+  const prefersReducedMotion = useReducedMotion();
 
   const fallbackSearches: PopularSearch[] =
     lang === "ar"
@@ -77,6 +79,17 @@ export function Hero() {
     };
   }, []);
 
+  useEffect(() => {
+    const mobileQuery = window.matchMedia("(max-width: 768px)");
+    const updateMobileState = () => setIsMobile(mobileQuery.matches);
+    updateMobileState();
+    mobileQuery.addEventListener("change", updateMobileState);
+
+    return () => {
+      mobileQuery.removeEventListener("change", updateMobileState);
+    };
+  }, []);
+
   const visibleSearches = popularSearches.length ? popularSearches : fallbackSearches;
   const tickerMessages =
     lang === "ar"
@@ -97,29 +110,36 @@ export function Hero() {
           "Read verified reports, then decide",
         ];
   const tickerItems = Array.from({ length: 4 }).flatMap(() => tickerMessages);
+  const shouldSimplifyMotion = Boolean(prefersReducedMotion) || isMobile;
 
   return (
     <section className="relative flex min-h-[80vh] flex-col items-center justify-center overflow-hidden pb-16 pt-24 sm:pt-32 md:pb-32 md:pt-48">
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background z-0" />
       <div className="hero-grid absolute inset-0 z-0 opacity-70" />
-      <motion.div
+      {!shouldSimplifyMotion && (
+        <motion.div
         aria-hidden="true"
         className="absolute left-1/2 top-[18%] z-0 h-px w-[min(86vw,980px)] -translate-x-1/2 bg-gradient-to-r from-transparent via-primary/40 to-transparent dark:via-neon-blue/50"
         animate={{ y: [0, 360, 0], opacity: [0, 0.55, 0] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
       />
-      <motion.div
+      )}
+      {!shouldSimplifyMotion && (
+        <motion.div
         aria-hidden="true"
         className="hero-signal-panel absolute left-[10%] top-[34%] z-0 hidden h-20 w-36 rounded-md border border-primary/15 bg-white/35 shadow-[0_18px_60px_rgba(37,99,235,0.12)] backdrop-blur-sm dark:border-neon-blue/20 dark:bg-white/[0.03] dark:shadow-[0_18px_60px_rgba(0,243,255,0.10)] md:block"
         animate={{ y: [0, -14, 0], opacity: [0.22, 0.48, 0.22], rotate: [-3, 2, -3] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
       />
-      <motion.div
+      )}
+      {!shouldSimplifyMotion && (
+        <motion.div
         aria-hidden="true"
         className="hero-signal-panel absolute right-[12%] top-[24%] z-0 hidden h-16 w-32 rounded-md border border-blue-500/15 bg-white/30 shadow-[0_16px_50px_rgba(14,165,233,0.12)] backdrop-blur-sm dark:border-blue-500/20 dark:bg-white/[0.03] dark:shadow-[0_16px_50px_rgba(0,243,255,0.08)] md:block"
         animate={{ y: [0, -18, 0], x: [0, 8, 0], opacity: [0.18, 0.42, 0.18] }}
         transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
       />
+      )}
 
       <div className="relative z-10 mx-auto w-full max-w-4xl px-4 text-center">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
@@ -130,8 +150,8 @@ export function Hero() {
             transition={{ duration: 0.45, delay: 0.05 }}
           >
             <div className="hero-marquee" dir="ltr">
-              <div className="hero-marquee-track">
-                {[0, 1].map((segment) => (
+              <div className={`hero-marquee-track ${shouldSimplifyMotion ? "hero-marquee-track--static" : ""}`}>
+                {(shouldSimplifyMotion ? [0] : [0, 1]).map((segment) => (
                   <div key={`segment-${segment}`} className="hero-marquee-segment" aria-hidden={segment === 1}>
                     {tickerItems.map((message, i) => (
                       <div key={`ticker-${segment}-${i}`} className="hero-marquee-item" dir={lang === "ar" ? "rtl" : "ltr"}>

@@ -352,6 +352,10 @@ html.dark.is-page-loading body::after {
   will-change: transform;
 }
 
+.hero-marquee-track--static {
+  animation: none;
+}
+
 .hero-marquee-segment {
   display: flex;
   flex-shrink: 0;
@@ -444,5 +448,26 @@ html.dark.is-page-loading body::after {
   .stat-card::before,
   .lively-card::before {
     transition: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-grid,
+  .search-aura,
+  .section-sheen {
+    animation: none;
+  }
+
+  .hero-grid {
+    background-size: 56px 56px;
+    opacity: 0.45;
+  }
+
+  .hero-marquee-track {
+    animation-duration: 120s;
+  }
+
+  .glass-panel {
+    backdrop-filter: none;
   }
 }

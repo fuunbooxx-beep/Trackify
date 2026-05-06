@@ -73,6 +73,20 @@ export const TARGET_CATEGORY_OPTIONS: TargetCategoryOption[] = [
     descriptionEn: "Fashion pages, clothing sellers, and model-related stores.",
     descriptionAr: "صفحات الموضة، بائعي الملابس، والمتاجر المرتبطة بالموديلز.",
   },
+  {
+    value: "marketing",
+    labelEn: "Marketing",
+    labelAr: "ماركتنج",
+    descriptionEn: "Marketing agencies, ad services, media buying, and promotional pages.",
+    descriptionAr: "وكالات التسويق، خدمات الإعلانات، شراء الميديا، والصفحات الترويجية.",
+  },
+  {
+    value: "food",
+    labelEn: "Food",
+    labelAr: "أكل",
+    descriptionEn: "Food stores, restaurants, delivery pages, and kitchen businesses.",
+    descriptionAr: "متاجر الأكل، المطاعم، صفحات الدليفري، ومشاريع المأكولات.",
+  },
 ];
 
 export type TargetStatsRecord = {
@@ -113,10 +127,17 @@ export const TARGET_REASON_OPTIONS: TargetReasonOption[] = [
   },
   {
     value: "angry_reacts",
-    labelEn: "ANGRY REACTS \ud83d\ude21",
-    labelAr: "\u062a\u0641\u0627\u0639\u0644\u0627\u062a \u0623\u063a\u0636\u0628\u0646\u064a \ud83d\ude21",
+    labelEn: "NEGATIVE FEEDBACK",
+    labelAr: "\u062a\u0642\u064a\u064a\u0645\u0627\u062a \u0633\u0644\u0628\u064a\u0629",
     descriptionEn: "The page has visible angry reactions or repeated negative reactions.",
     descriptionAr: "\u064a\u0648\u062c\u062f \u062a\u0641\u0627\u0639\u0644 \u063a\u0636\u0628 \u0623\u0648 \u062a\u0641\u0627\u0639\u0644\u0627\u062a \u0633\u0644\u0628\u064a\u0629 \u0645\u062a\u0643\u0631\u0631\u0629.",
+  },
+  {
+    value: "fake_reacts",
+    labelEn: "FAKE ENGAGEMENT",
+    labelAr: "\u062a\u0641\u0627\u0639\u0644 \u0648\u0647\u0645\u064a",
+    descriptionEn: "Engagement appears manipulated with fake likes or reactions to look trustworthy.",
+    descriptionAr: "\u0627\u0644\u062a\u0641\u0627\u0639\u0644 \u064a\u0628\u062f\u0648 \u0645\u062a\u0644\u0627\u0639\u0628 \u0628\u0647 \u0639\u0628\u0631 \u0644\u0627\u064a\u0643\u0627\u062a \u0623\u0648 \u0631\u064a\u0627\u0643\u062a\u0627\u062a \u0648\u0647\u0645\u064a\u0629 \u0644\u0625\u0638\u0647\u0627\u0631 \u0627\u0644\u0635\u0641\u062d\u0629 \u0628\u0634\u0643\u0644 \u0645\u0648\u062b\u0648\u0642.",
   },
   {
     value: "fake_giveaway",
@@ -138,6 +159,13 @@ export const TARGET_REASON_OPTIONS: TargetReasonOption[] = [
     labelAr: "\u0639\u062f\u0645 \u062a\u0633\u0644\u064a\u0645",
     descriptionEn: "Customers report paying without receiving the agreed item or service.",
     descriptionAr: "\u0639\u0645\u0644\u0627\u0621 \u0628\u0644\u063a\u0648\u0627 \u0639\u0646 \u062f\u0641\u0639 \u0628\u062f\u0648\u0646 \u0627\u0633\u062a\u0644\u0627\u0645.",
+  },
+  {
+    value: "block_after_pay",
+    labelEn: "BLOCKED AFTER PAYMENT",
+    labelAr: "\u062d\u0638\u0631 \u0628\u0639\u062f \u0627\u0644\u062f\u0641\u0639",
+    descriptionEn: "The seller blocks the customer right after receiving payment and stops responding.",
+    descriptionAr: "\u0627\u0644\u0628\u0627\u0626\u0639 \u064a\u0642\u0648\u0645 \u0628\u0639\u0645\u0644 \u0628\u0644\u0648\u0643 \u0644\u0644\u0639\u0645\u064a\u0644 \u0645\u0628\u0627\u0634\u0631\u0629 \u0628\u0639\u062f \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u0641\u0644\u0648\u0633 \u0648\u064a\u062a\u0648\u0642\u0641 \u0639\u0646 \u0627\u0644\u0631\u062f.",
   },
   {
     value: "payment_delay",
@@ -374,12 +402,18 @@ export function slugifyTargetName(name: string) {
 export function extractTargetIdFromSlug(slugOrId: string) {
   const decoded = decodeURIComponent(slugOrId || "");
   const separatorIndex = decoded.lastIndexOf("--");
-  return separatorIndex >= 0 ? decoded.slice(separatorIndex + 2) : decoded;
+  const token = separatorIndex >= 0 ? decoded.slice(separatorIndex + 2) : decoded;
+
+  // Backward compatible: support old full ids and new compact tokens.
+  if (/^target_\d+$/i.test(token)) return token;
+  if (/^t\d+$/i.test(token)) return `target_${token.slice(1)}`;
+  if (/^\d+$/.test(token)) return `target_${token}`;
+  return token;
 }
 
 export function getTargetHref(target: Pick<TargetRecord, "id" | "name">) {
-  const id = String(target.id || "").trim();
-  return `/target/${slugifyTargetName(String(target.name || "target"))}--${encodeURIComponent(id)}`;
+  const slug = slugifyTargetName(String(target.name || ""));
+  return `/${encodeURIComponent(slug || "target")}`;
 }
 
 export function getTargetPhones(target: TargetRecord) {

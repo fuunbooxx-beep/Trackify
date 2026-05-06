@@ -1,10 +1,13 @@
 "use client";
 
 import { Navbar } from "@/components/Navbar";
+import { AuthContext } from "@/lib/providers";
+import { isAdminUser } from "@/lib/auth-user";
 import { useLanguage } from "@/lib/i18n/context";
 import {
   getTargetCategoryDescription,
   getTargetCategoryLabel,
+  getTargetHref,
   normalizeTargetCategory,
   TARGET_CATEGORY_OPTIONS,
   type TargetRecord,
@@ -13,12 +16,14 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import { Layers, Loader2, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 
 type TargetWithId = TargetRecord & { id: string };
 
 export default function CategoryPage() {
   const { lang } = useLanguage();
+  const { user } = useContext(AuthContext);
+  const isAdmin = isAdminUser(user);
   const [targets, setTargets] = useState<TargetWithId[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -152,23 +157,33 @@ export default function CategoryPage() {
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {filteredTargets.map((target) => (
-                <Link
+                <div
                   key={target.id}
-                  href={`/dashboard?edit=${target.id}`}
                   className="rounded-2xl border border-border bg-background/70 p-4 transition hover:-translate-y-0.5 hover:border-primary/30"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-black">{target.name || target.id}</p>
-                      <p className="mt-1 truncate text-xs text-muted-foreground" dir="ltr">
-                        {target.id}
-                      </p>
+                    <div className="min-w-0 flex-1">
+                      <Link href={getTargetHref(target)} className="block">
+                        <p className="truncate text-base font-black">{target.name || target.id}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground" dir="ltr">
+                          {target.id}
+                        </p>
+                      </Link>
+                      <span className="mt-2 inline-flex shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-1 text-[11px] font-black text-primary dark:text-neon-blue">
+                        {getTargetCategoryLabel(normalizeTargetCategory(target.category), lang)}
+                      </span>
                     </div>
-                    <span className="inline-flex shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-1 text-[11px] font-black text-primary dark:text-neon-blue">
-                      {getTargetCategoryLabel(normalizeTargetCategory(target.category), lang)}
-                    </span>
+
+                    {isAdmin && (
+                      <Link
+                        href={`/dashboard?edit=${target.id}`}
+                        className="shrink-0 rounded-xl bg-secondary px-3 py-2 text-xs font-bold hover:bg-secondary/70"
+                      >
+                        {lang === "ar" ? "تعديل" : "Edit"}
+                      </Link>
+                    )}
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           )}

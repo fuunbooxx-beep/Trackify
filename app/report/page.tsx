@@ -199,6 +199,23 @@ function ReportContent() {
           read: false,
           createdAt: Date.now(),
         });
+
+        await addDoc(collection(db, "notifications"), {
+          audience: "admin",
+          reportId: reportRef.id,
+          status: "pending_review",
+          title: lang === "ar" ? "بلاغ جديد بانتظار المراجعة" : "New report awaiting review",
+          message:
+            lang === "ar"
+              ? `عميل أرسل بلاغ جديد عن: ${targetName.trim() || "-"}.`
+              : `A customer submitted a new report for: ${targetName.trim() || "-"}.`,
+          targetName: targetName.trim(),
+          targetLink: normalizeUrl(targetLink.trim()),
+          authorId: user.uid,
+          authorEmail: user.email || "",
+          read: false,
+          createdAt: Date.now(),
+        });
       }
       if (resolvedTargetId) {
         await syncTargetStats(db, resolvedTargetId);

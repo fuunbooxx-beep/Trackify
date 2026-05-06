@@ -7,11 +7,18 @@ import { useTheme } from "next-themes";
 export function Particles() {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [particles, setParticles] = useState<{ id: number; x: number; y: number; size: number; delay: number }[]>([]);
 
   useEffect(() => {
     setMounted(true);
-    const newParticles = Array.from({ length: 40 }).map((_, i) => ({
+    const mobileQuery = window.matchMedia("(max-width: 768px)");
+    const updateMobileState = () => setIsMobile(mobileQuery.matches);
+    updateMobileState();
+    mobileQuery.addEventListener("change", updateMobileState);
+
+    const particleCount = mobileQuery.matches ? 10 : 32;
+    const newParticles = Array.from({ length: particleCount }).map((_, i) => ({
       id: i,
       x: Math.random() * 100,
       y: Math.random() * 100,
@@ -19,11 +26,17 @@ export function Particles() {
       delay: Math.random() * 5,
     }));
     setParticles(newParticles);
+
+    return () => {
+      mobileQuery.removeEventListener("change", updateMobileState);
+    };
   }, []);
 
   if (!mounted) return null;
 
   const isDark = resolvedTheme === "dark";
+
+  if (isMobile) return null;
 
   return (
     <div className={`fixed inset-0 pointer-events-none z-[-1] overflow-hidden ${isDark ? "opacity-50" : "opacity-35"}`}>

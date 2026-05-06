@@ -22,6 +22,7 @@ export default function ProfilePage() {
   const isAdmin = isAdminUser(user);
   const [reports, setReports] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarSaving, setAvatarSaving] = useState(false);
@@ -42,18 +43,31 @@ export default function ProfilePage() {
       if (!user) return;
       setDataLoading(true);
       try {
-        const [reportsSnap, notificationsSnap] = await Promise.all([
+        const tasks: Promise<any>[] = [
           getDocs(query(collection(db, "reports"), where("authorId", "==", user.uid))),
           getDocs(query(collection(db, "notifications"), where("userId", "==", user.uid))),
-        ]);
+        ];
+        if (isAdmin) {
+          tasks.push(getDocs(query(collection(db, "notifications"), where("audience", "==", "admin"))));
+        }
+        const [reportsSnap, notificationsSnap, adminNotificationsSnap] = await Promise.all(tasks);
         setReports(reportsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
         setNotifications(notificationsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
+        if (isAdmin && adminNotificationsSnap) {
+          setAdminNotifications(
+            adminNotificationsSnap.docs
+              .map((d: any) => ({ id: d.id, ...d.data() }))
+              .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+          );
+        } else {
+          setAdminNotifications([]);
+        }
       } finally {
         setDataLoading(false);
       }
     };
     void fetchData();
-  }, [user]);
+  }, [user, isAdmin]);
 
   const saveAvatarUrl = async (nextUrl: string) => {
     if (!user) return;
@@ -232,6 +246,36 @@ export default function ProfilePage() {
               </Link>
             </div>
           </motion.div>
+        )}
+
+        {isAdmin && (
+          <div className="glass-panel p-8 rounded-3xl mb-6">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className="text-xl font-bold">{lang === "ar" ? "تنبيهات الإدارة" : "Admin alerts"}</h2>
+              <span className="rounded-full bg-secondary px-3 py-1 text-xs font-black">
+                {adminNotifications.filter((n) => n.read !== true).length} {lang === "ar" ? "غير مقروء" : "unread"}
+              </span>
+            </div>
+            {adminNotifications.length === 0 ? (
+              <p className="text-muted-foreground font-medium">
+                {lang === "ar" ? "لا توجد تنبيهات إدارة حالياً." : "No admin alerts right now."}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {adminNotifications.slice(0, 8).map((item) => (
+                  <div key={item.id} className="rounded-xl border border-border p-3 bg-background/60">
+                    <p className="font-bold">{item.title || "-"}</p>
+                    <p className="text-sm text-muted-foreground">{item.message || "-"}</p>
+                    {(item.targetName || item.targetLink) && (
+                      <p className="mt-1 text-xs text-muted-foreground" dir="ltr">
+                        {item.targetName ? `• ${item.targetName}` : ""} {item.targetLink ? `• ${item.targetLink}` : ""}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         <div className="glass-panel p-8 rounded-3xl">
