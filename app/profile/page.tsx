@@ -10,7 +10,7 @@ import { useLanguage } from "@/lib/i18n/context";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { isAdminUser } from "@/lib/auth-user";
-import { collection, doc, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { collection, doc, DocumentData, getDocs, query, QueryDocumentSnapshot, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getAvatarUrl } from "@/lib/avatar";
@@ -51,12 +51,20 @@ export default function ProfilePage() {
           tasks.push(getDocs(query(collection(db, "notifications"), where("audience", "==", "admin"))));
         }
         const [reportsSnap, notificationsSnap, adminNotificationsSnap] = await Promise.all(tasks);
-        setReports(reportsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
-        setNotifications(notificationsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
+        setReports(
+          reportsSnap.docs
+            .map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }))
+            .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+        );
+        setNotifications(
+          notificationsSnap.docs
+            .map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }))
+            .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+        );
         if (isAdmin && adminNotificationsSnap) {
           setAdminNotifications(
             adminNotificationsSnap.docs
-              .map((d: any) => ({ id: d.id, ...d.data() }))
+              .map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }))
               .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
           );
         } else {
