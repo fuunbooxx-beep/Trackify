@@ -350,9 +350,10 @@ function ReportContent() {
       }
 
       const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
+      const reportAuthorId = user?.uid || `guest_${Date.now()}`;
       const reportRef = await addDoc(collection(db, "reports"), {
         targetId: resolvedTargetId,
-        authorId: user?.uid || "",
+        authorId: reportAuthorId,
         authorEmail: user?.email || "",
         reporterName: sanitizedReporterName,
         isAnonymousReporter: anonymousMode,
