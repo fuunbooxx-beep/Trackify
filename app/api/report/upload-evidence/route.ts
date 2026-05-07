@@ -37,14 +37,12 @@ export async function POST(req: Request) {
 
     for (let i = 0; i < files.length; i += 1) {
       const file = files[i];
-      const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
       const uploadPayload = new FormData();
       uploadPayload.append("file", file);
       uploadPayload.append("api_key", apiKey);
       uploadPayload.append("timestamp", timestamp);
       uploadPayload.append("folder", folder);
       uploadPayload.append("signature", signature);
-      uploadPayload.append("public_id", `${ownerKey}_${Date.now()}_${i}_${safeName.replace(/\.[^.]+$/, "")}`);
 
       const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: "POST",
