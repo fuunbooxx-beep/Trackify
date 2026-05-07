@@ -1,14 +1,13 @@
 "use client";
 
-import { Suspense, useState, useContext, useRef, useMemo } from "react";
+import { Suspense, useState, useContext, useRef, useMemo, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { AuthContext } from "@/lib/providers";
 import { ShieldAlert, Image as ImageIcon, CheckCircle2, AlertCircle } from "lucide-react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, doc, getDocs, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, limit, query, setDoc, where } from "firebase/firestore";
 import { motion } from "motion/react";
-import Link from "next/link";
 import { useLanguage } from "@/lib/i18n/context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { isAdminUser } from "@/lib/auth-user";
@@ -17,11 +16,110 @@ import { detectPlatform, getRiskStatusFromReportCount, getTargetAliases, getTarg
 import { detectExistingTargetMatch } from "@/lib/target-linking";
 import { classifyEvidenceTier } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
+import {
+  isValidEvidenceImage,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_IMAGE_SIZE_BYTES,
+  MAX_REPORT_IMAGES,
+  normalizeReportText,
+  normalizeTargetKey,
+  sanitizeReportText,
+  simpleHash,
+} from "@/lib/report-safety";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          callback?: (token: string) => void;
+          "expired-callback"?: () => void;
+          "error-callback"?: () => void;
+          action?: string;
+          cData?: string;
+          theme?: "light" | "dark" | "auto";
+        }
+      ) => string;
+      reset?: (widgetId?: string) => void;
+      remove?: (widgetId?: string) => void;
+    };
+  }
+}
+
+function TurnstileCaptcha({
+  onToken,
+  onError,
+}: {
+  onToken: (token: string) => void;
+  onError: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const onTokenRef = useRef(onToken);
+  const onErrorRef = useRef(onError);
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+  useEffect(() => {
+    onTokenRef.current = onToken;
+  }, [onToken]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  useEffect(() => {
+    if (!siteKey) return;
+    const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile="1"]');
+    if (existing) return;
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.dataset.turnstile = "1";
+    document.head.appendChild(script);
+  }, [siteKey]);
+
+  useEffect(() => {
+    if (!siteKey || !containerRef.current) return;
+    let cancelled = false;
+
+    const renderWidget = () => {
+      if (cancelled || !containerRef.current) return;
+      const ts = window.turnstile;
+      if (!ts?.render) {
+        window.setTimeout(renderWidget, 120);
+        return;
+      }
+      if (widgetIdRef.current) ts.remove?.(widgetIdRef.current);
+      widgetIdRef.current = ts.render(containerRef.current, {
+        sitekey: siteKey,
+        theme: "auto",
+        callback: (token) => onTokenRef.current(token),
+        "expired-callback": () => onTokenRef.current(""),
+        "error-callback": () => {
+          onTokenRef.current("");
+          onErrorRef.current();
+        },
+      });
+    };
+
+    renderWidget();
+    return () => {
+      cancelled = true;
+      if (widgetIdRef.current) window.turnstile?.remove?.(widgetIdRef.current);
+      widgetIdRef.current = null;
+    };
+  }, [siteKey]);
+
+  if (!siteKey) return null;
+  return <div className="mt-1 flex justify-center md:justify-start"><div ref={containerRef} /></div>;
+}
 
 function ReportContent() {
   const { user, loading } = useContext(AuthContext);
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { lang } = useLanguage();
   
   const presetTargetName = searchParams.get("target") || "";
@@ -33,6 +131,8 @@ function ReportContent() {
   const [targetLink, setTargetLink] = useState(presetTargetLink);
   const [category, setCategory] = useState("scam");
   const [description, setDescription] = useState("");
+  const [reporterNameInput, setReporterNameInput] = useState("");
+  const [anonymousMode, setAnonymousMode] = useState(false);
   const [reportAsAdmin, setReportAsAdmin] = useState(false);
   
   const [files, setFiles] = useState<File[]>([]);
@@ -41,14 +141,9 @@ function ReportContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const nextAfterAuth = useMemo(() => {
-    const params = new URLSearchParams();
-    if (presetTargetName) params.set("target", presetTargetName);
-    if (presetTargetLink) params.set("link", presetTargetLink);
-    if (lockPreset) params.set("lock", "1");
-    const query = params.toString();
-    return `/report${query ? `?${query}` : ""}`;
-  }, [lockPreset, presetTargetLink, presetTargetName]);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaBroken, setCaptchaBroken] = useState(false);
+  const turnstileEnabled = useMemo(() => Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY), []);
   const supabase = useMemo(() => {
     try {
       return createSupabaseBrowserClient();
@@ -60,17 +155,29 @@ function ReportContent() {
   const evidenceBucket = "report-evidence";
   const isAdmin = isAdminUser(user);
 
+  useEffect(() => {
+    if (!reporterNameInput.trim() && user?.displayName) {
+      setReporterNameInput(user.displayName);
+    }
+  }, [reporterNameInput, user?.displayName]);
+
+  const generateAnonymousName = () => {
+    const code = Math.floor(100 + Math.random() * 900);
+    setReporterNameInput(`Anonymous participant ${code}`);
+    setAnonymousMode(true);
+  };
+
   const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files ?? []);
     if (!selected.length) return;
 
-    const imageOnly = selected.filter((file) => file.type.startsWith("image/"));
+    const imageOnly = selected.filter((file) => isValidEvidenceImage(file));
     if (!imageOnly.length) {
       setErrorMsg(lang === "ar" ? "اختار صور فقط (JPG/PNG/WebP)." : "Please select image files only (JPG/PNG/WebP).");
       return;
     }
 
-    const maxAllowed = 10;
+    const maxAllowed = MAX_REPORT_IMAGES;
     const remainingSlots = Math.max(0, maxAllowed - files.length);
     if (remainingSlots <= 0) {
       setErrorMsg(lang === "ar" ? "وصلت للحد الأقصى (10 صور)." : "Maximum reached (10 images).");
@@ -78,7 +185,7 @@ function ReportContent() {
     }
 
     const accepted = imageOnly.slice(0, remainingSlots);
-    const tooLarge = accepted.find((file) => file.size > 5 * 1024 * 1024);
+    const tooLarge = accepted.find((file) => file.size > MAX_IMAGE_SIZE_BYTES);
     if (tooLarge) {
       setErrorMsg(lang === "ar" ? "حجم كل صورة لازم يكون أقل من 5MB." : "Each image must be smaller than 5MB.");
       return;
@@ -102,15 +209,66 @@ function ReportContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
     if (!targetName) {
       setErrorMsg(lang === "ar" ? "الرجاء إدخال إسم الصفحة أو البائع." : "Please enter page or seller name.");
+      return;
+    }
+    if (!reporterNameInput.trim()) {
+      setErrorMsg(lang === "ar" ? "لازم تكتب اسم يظهر في البلاغ (اسمك أو اسم عشوائي)." : "Please enter a display name for the report (real or random).");
+      return;
+    }
+    if (turnstileEnabled && !captchaToken) {
+      setErrorMsg(lang === "ar" ? "يرجى إكمال اختبار التحقق أولاً." : "Please complete the Turnstile verification first.");
       return;
     }
     setErrorMsg("");
     setIsSubmitting(true);
 
     try {
+      const sanitizedDescription = sanitizeReportText(description).slice(0, MAX_DESCRIPTION_LENGTH);
+      const sanitizedReporterName = sanitizeReportText(reporterNameInput).slice(0, 60);
+      const normalizedTargetName = normalizeTargetName(targetName);
+      const duplicateCheckKey = normalizeTargetKey(targetName);
+      const descriptionHash = simpleHash(normalizeReportText(sanitizedDescription));
+
+      if (turnstileEnabled) {
+        const verifyRes = await fetch("/api/turnstile/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: captchaToken,
+            targetName,
+            targetLink,
+            description: sanitizedDescription,
+          }),
+        });
+        if (!verifyRes.ok) {
+          const body = (await verifyRes.json().catch(() => ({}))) as { error?: string };
+          const reason = body.error || "verification_failed";
+          if (reason === "rate_limited") {
+            throw new Error(lang === "ar" ? "محاولات كثيرة جدًا. جرّب بعد دقيقة." : "Too many attempts. Please try again in a minute.");
+          }
+          if (reason === "duplicate_attempt") {
+            throw new Error(lang === "ar" ? "تم رصد محاولة مكررة لنفس البلاغ خلال وقت قصير." : "A duplicate submission was detected recently.");
+          }
+          if (reason === "abusive_content_detected") {
+            throw new Error(lang === "ar" ? "تم رفض البلاغ لأن المحتوى يبدو مخالفًا." : "Submission rejected because content appears abusive.");
+          }
+          throw new Error(lang === "ar" ? "فشل التحقق الأمني. أعد المحاولة." : "Security verification failed. Please try again.");
+        }
+      }
+
+      const duplicateQuery = query(
+        collection(db, "reports"),
+        where("targetNameKey", "==", duplicateCheckKey),
+        limit(20)
+      );
+      const duplicateSnap = await getDocs(duplicateQuery);
+      const hasDuplicate = duplicateSnap.docs.some((item) => String(item.data().descriptionHash || "") === descriptionHash);
+      if (hasDuplicate) {
+        throw new Error(lang === "ar" ? "هذا البلاغ مكرر بالفعل." : "This report already exists.");
+      }
+
       const uploadedImageUrls: string[] = [];
       if (files.length > 0) {
         if (!supabase) {
@@ -119,7 +277,8 @@ function ReportContent() {
         for (let i = 0; i < files.length; i += 1) {
           const file = files[i];
           const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-          const filePath = `${user.uid}/${Date.now()}_${i}_${safeName}`;
+          const ownerKey = user?.uid || `guest_${Date.now()}`;
+          const filePath = `${ownerKey}/${Date.now()}_${i}_${safeName}`;
           const { error: uploadError } = await supabase.storage.from(evidenceBucket).upload(filePath, file, {
             upsert: false,
             contentType: file.type,
@@ -132,7 +291,6 @@ function ReportContent() {
       }
 
       let resolvedTargetId = "";
-      const normalizedTargetName = normalizeTargetName(targetName);
 
       if (isAdmin && reportAsAdmin) {
         const targetPool = (await getDocs(collection(db, "targets"))).docs.map(
@@ -164,18 +322,22 @@ function ReportContent() {
         await setDoc(doc(db, "targets", resolvedTargetId), mergedPayload, { merge: true });
       }
 
-      const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, description);
+      const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
       const reportRef = await addDoc(collection(db, "reports"), {
         targetId: resolvedTargetId,
-        authorId: user.uid,
-        authorEmail: user.email || "",
-        reporterName: user.displayName || "",
-        authorPhotoURL: getAvatarUrl(user.photoURL),
+        authorId: user?.uid || "",
+        authorEmail: user?.email || "",
+        reporterName: sanitizedReporterName,
+        isAnonymousReporter: anonymousMode,
+        authorPhotoURL: anonymousMode ? getAvatarUrl(null) : getAvatarUrl(user?.photoURL),
+        isGuest: !user,
         targetName: targetName.trim(),
+        targetNameKey: duplicateCheckKey,
         targetPhone: normalizePhone(targetPhone.trim()),
         targetLink: normalizeUrl(targetLink.trim()),
         category: category,
-        description: description,
+        description: sanitizedDescription,
+        descriptionHash,
         evidenceImages: uploadedImageUrls,
         evidenceTier,
         status: isAdmin && reportAsAdmin ? "approved" : "pending",
@@ -184,12 +346,12 @@ function ReportContent() {
         allowUserEdit: false,
         editRequestPending: false,
         reviewNote: "",
-        source: isAdmin && reportAsAdmin ? "admin_direct" : "user",
+        source: isAdmin && reportAsAdmin ? "admin_direct" : anonymousMode ? "user_anonymous" : "user",
         createdAt: Date.now(),
         ...(isAdmin && reportAsAdmin ? { reviewedAt: Date.now() } : {}),
       });
 
-      if (!(isAdmin && reportAsAdmin)) {
+      if (!(isAdmin && reportAsAdmin) && user) {
         await addDoc(collection(db, "notifications"), {
           userId: user.uid,
           reportId: reportRef.id,
@@ -224,10 +386,16 @@ function ReportContent() {
       imagePreviews.forEach((url) => URL.revokeObjectURL(url));
       setFiles([]);
       setImagePreviews([]);
+      setDescription("");
+      setReporterNameInput("");
+      setAnonymousMode(false);
+      setTargetPhone("");
+      if (!lockPreset) {
+        setTargetName("");
+        setTargetLink("");
+      }
+      setCaptchaToken("");
       setSuccess(true);
-      setTimeout(() => {
-        router.push("/profile");
-      }, 2000);
 
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -265,22 +433,11 @@ function ReportContent() {
         <p className="text-muted-foreground font-medium">{lang === "ar" ? "قدم دليلك وساعدنا نحذر غيرك من النصابين." : "Share your evidence and help protect others from scammers."}</p>
       </div>
 
-      {loading ? (
-        <div className="text-center">{lang === "ar" ? "جاري التحميل..." : "Loading..."}</div>
-      ) : !user ? (
-        <div className="glass-panel p-10 rounded-3xl text-center">
-          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-4">{lang === "ar" ? "لازم تسجل دخول الأول!" : "You need to sign in first!"}</h2>
-          <p className="text-muted-foreground mb-8">{lang === "ar" ? "عشان نتحقق من صحة البلاغات ونمنع السبام، لازم تسجّل دخول بحسابك (Trackify عبر Supabase)." : "To verify reports and prevent spam, please sign in with your account."}</p>
-          <Link href={`/auth?next=${encodeURIComponent(nextAfterAuth)}`} className="inline-flex bg-primary dark:bg-neon-blue text-white dark:text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition-transform">
-            {lang === "ar" ? "تسجيل الدخول للاستمرار" : "Sign in to continue"}
-          </Link>
-        </div>
-      ) : success ? (
+      {success ? (
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel p-10 rounded-3xl text-center border-green-500/30">
           <CheckCircle2 className="w-20 h-20 text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">{lang === "ar" ? "تم استلام بلاغك بنجاح!" : "Your report was submitted successfully!"}</h2>
-          <p className="text-muted-foreground">{lang === "ar" ? "جاري تحويلك لصفحة حسابك لمتابعة الحالة..." : "Redirecting you to your profile to track status..."}</p>
+          <h2 className="text-2xl font-bold mb-2">{lang === "ar" ? "تم إرسال تجربتك بنجاح ✅" : "Your experience was submitted successfully ✅"}</h2>
+          <p className="text-muted-foreground">{lang === "ar" ? "يمكنك إنشاء حساب لاحقًا لإدارة بلاغاتك أو تعديلها." : "You can create an account later to manage or edit your reports."}</p>
         </motion.div>
       ) : (
         <form onSubmit={handleSubmit} className="glass-panel p-6 md:p-10 rounded-3xl space-y-6">
@@ -300,6 +457,32 @@ function ReportContent() {
               </span>
             </div>
           )}
+
+          <div className="rounded-xl border border-border bg-background/60 p-4 space-y-3">
+            <label className="font-bold text-sm uppercase tracking-wider text-muted-foreground">
+              NAME <span className="text-destructive">*</span>
+            </label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                required
+                value={reporterNameInput}
+                onChange={(e) => {
+                  setReporterNameInput(e.target.value);
+                  setAnonymousMode(false);
+                }}
+                className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue transition-shadow font-medium"
+                placeholder={lang === "ar" ? "اكتب الاسم اللي هيظهر في البلاغ" : "Enter the name shown in the report"}
+              />
+              <button
+                type="button"
+                onClick={generateAnonymousName}
+                className="rounded-xl border border-border px-4 py-3 text-sm font-black whitespace-nowrap hover:bg-secondary transition-colors"
+              >
+                {lang === "ar" ? "اسم عشوائي" : "Random name"}
+              </button>
+            </div>
+          </div>
 
           {lockPreset && (presetTargetName || presetTargetLink) && (
             <div className="bg-primary/10 border border-primary/25 text-foreground p-4 rounded-xl flex items-start gap-3 font-semibold dark:bg-neon-blue/10 dark:border-neon-blue/25">
@@ -338,7 +521,8 @@ function ReportContent() {
               >
                 <option value="scam">{lang === "ar" ? "نصب / سرقة" : "Scam / account theft"}</option>
                 <option value="delay">{lang === "ar" ? "تأخير شديد في التسليم" : "Major delivery delay"}</option>
-                <option value="bad_treatment">{lang === "ar" ? "سوء معاملة / شتيمة" : "Abusive behavior"}</option>
+                <option value="bad_treatment">{lang === "ar" ? "سوء تعامل / إساءة" : "Poor treatment / abuse"}</option>
+                <option value="suspicious_untrusted">{lang === "ar" ? "مشبوهة / غير موثوق" : "Suspicious / untrusted"}</option>
                 <option value="successful_transaction">{lang === "ar" ? "تجربة ناجحة / معاملة سليمة" : "Successful transaction"}</option>
               </select>
             </div>
@@ -432,10 +616,38 @@ function ReportContent() {
             <p className="text-xs text-muted-foreground font-medium">{lang === "ar" ? "ملاحظة: تأكد من إخفاء معلوماتك الشخصية من الصور قبل رفعها." : "Note: hide your personal information before uploading screenshots."}</p>
           </div>
 
+          {turnstileEnabled ? (
+            <div className="space-y-2">
+              <label className="font-bold text-sm uppercase tracking-wider text-muted-foreground">
+                {lang === "ar" ? "التحقق الأمني" : "Security verification"}
+              </label>
+              <TurnstileCaptcha
+                onToken={(token) => {
+                  setCaptchaBroken(false);
+                  setCaptchaToken(token);
+                }}
+                onError={() => setCaptchaBroken(true)}
+              />
+              {captchaBroken && (
+                <p className="text-xs font-semibold text-destructive">
+                  {lang === "ar"
+                    ? "تعذر تحميل التحقق. حدّث الصفحة أو تأكد من إعدادات Turnstile."
+                    : "Failed to load verification. Refresh or check Turnstile configuration."}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">
+              {lang === "ar"
+                ? "تنبيه: Turnstile غير مفعل في البيئة الحالية."
+                : "Notice: Turnstile is not enabled in this environment."}
+            </p>
+          )}
+
           <div className="pt-6 border-t border-border mt-8 flex justify-end">
             <button 
               type="submit" 
-              disabled={isSubmitting}
+              disabled={isSubmitting || loading}
               className="bg-primary dark:bg-neon-blue text-white dark:text-black font-bold px-8 py-4 rounded-xl hover:scale-[1.02] transition-transform w-full md:w-auto shadow-[0_0_15px_rgba(37,99,235,0.3)] dark:shadow-[0_0_15px_rgba(0,243,255,0.3)] disabled:opacity-50 disabled:hover:scale-100"
             >
               {isSubmitting ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...") : (lang === "ar" ? "شارك تجربتك" : "Share Your Experience")}

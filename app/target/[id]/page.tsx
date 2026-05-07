@@ -1086,7 +1086,8 @@ export default function TargetDetailsPage() {
                 >
                   <option value="scam">{lang === "ar" ? "نصب وسرقة" : "Scam and theft"}</option>
                   <option value="delay">{lang === "ar" ? "تأخير متعمد" : "Intentional delay"}</option>
-                  <option value="bad_treatment">{lang === "ar" ? "سوء معاملة" : "Bad treatment"}</option>
+                  <option value="bad_treatment">{lang === "ar" ? "سوء تعامل / إساءة" : "Poor treatment / abuse"}</option>
+                  <option value="suspicious_untrusted">{lang === "ar" ? "مشبوهة / غير موثوق" : "Suspicious / untrusted"}</option>
                   <option value="successful_transaction">{lang === "ar" ? "تجربة ناجحة" : "Successful transaction"}</option>
                 </select>
               </div>
@@ -1163,7 +1164,8 @@ export default function TargetDetailsPage() {
                 >
                   <option value="scam">{lang === "ar" ? "نصب وسرقة" : "Scam and theft"}</option>
                   <option value="delay">{lang === "ar" ? "تأخير متعمد" : "Intentional delay"}</option>
-                  <option value="bad_treatment">{lang === "ar" ? "سوء معاملة" : "Bad treatment"}</option>
+                  <option value="bad_treatment">{lang === "ar" ? "سوء تعامل / إساءة" : "Poor treatment / abuse"}</option>
+                  <option value="suspicious_untrusted">{lang === "ar" ? "مشبوهة / غير موثوق" : "Suspicious / untrusted"}</option>
                   <option value="successful_transaction">{lang === "ar" ? "تجربة ناجحة" : "Successful transaction"}</option>
                 </select>
               </div>
@@ -1261,6 +1263,8 @@ export default function TargetDetailsPage() {
                               ? "border-red-200 bg-red-100 text-red-700 dark:border-red-400/35 dark:bg-red-500/15 dark:text-red-200"
                               : report.category === "delay"
                                 ? "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-400/35 dark:bg-amber-500/15 dark:text-amber-200"
+                                : report.category === "suspicious_untrusted"
+                                  ? "border-violet-200 bg-violet-100 text-violet-700 dark:border-violet-400/35 dark:bg-violet-500/15 dark:text-violet-200"
                                 : report.category === "successful_transaction"
                                   ? "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/15 dark:text-emerald-200"
                                   : "border-blue-200 bg-blue-100 text-blue-700 dark:border-sky-400/35 dark:bg-sky-500/15 dark:text-sky-200"
@@ -1270,9 +1274,11 @@ export default function TargetDetailsPage() {
                           ? (lang === "ar" ? "نصب وسرقة" : "Scam and theft")
                           : report.category === "delay"
                             ? (lang === "ar" ? "تأخير متعمد" : "Intentional delay")
+                            : report.category === "suspicious_untrusted"
+                              ? (lang === "ar" ? "مشبوهة / غير موثوق" : "Suspicious / untrusted")
                             : report.category === "successful_transaction"
                               ? (lang === "ar" ? "تجربة ناجحة" : "Successful transaction")
-                              : (lang === "ar" ? "سوء معاملة" : "Bad treatment")}
+                              : (lang === "ar" ? "سوء تعامل / إساءة" : "Poor treatment / abuse")}
                         </span>
                         {report.evidenceTier && (
                           <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-bold text-muted-foreground dark:bg-card/80 dark:text-white">

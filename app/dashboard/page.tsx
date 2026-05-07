@@ -1243,7 +1243,8 @@ export default function DashboardPage() {
                   <select value={manualCategory} onChange={(e) => setManualCategory(e.target.value)} className="input">
                     <option value="scam">{lang === "ar" ? "نصب / سرقة" : "Scam / theft"}</option>
                     <option value="delay">{lang === "ar" ? "تأخير متعمد" : "Intentional delay"}</option>
-                    <option value="bad_treatment">{lang === "ar" ? "سوء معاملة" : "Bad treatment"}</option>
+                    <option value="bad_treatment">{lang === "ar" ? "سوء تعامل / إساءة" : "Poor treatment / abuse"}</option>
+                    <option value="suspicious_untrusted">{lang === "ar" ? "مشبوهة / غير موثوق" : "Suspicious / untrusted"}</option>
                     <option value="successful_transaction">{lang === "ar" ? "تجربة ناجحة" : "Successful transaction"}</option>
                   </select>
                 </Field>
