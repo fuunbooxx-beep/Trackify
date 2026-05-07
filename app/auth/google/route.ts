@@ -45,9 +45,16 @@ export async function GET(request: NextRequest) {
   }
 
   const redirectResponse = NextResponse.redirect(data.url);
-  response.cookies.getAll().forEach((cookie) => {
-    redirectResponse.cookies.set(cookie.name, cookie.value);
-  });
+  const setCookieHeaders = (response.headers as any).getSetCookie?.() as string[] | undefined;
+  if (setCookieHeaders && setCookieHeaders.length > 0) {
+    setCookieHeaders.forEach((cookieValue) => {
+      redirectResponse.headers.append("set-cookie", cookieValue);
+    });
+  } else {
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value);
+    });
+  }
   return redirectResponse;
 }
 
