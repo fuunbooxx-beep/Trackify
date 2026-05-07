@@ -11,6 +11,7 @@ const RESERVED_ROOT_ROUTES = new Set([
   "profile",
   "report",
   "search",
+  "signup",
   "target",
   "trending",
 ]);
