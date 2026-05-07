@@ -289,11 +289,28 @@ function ReportContent() {
           body: uploadForm,
         });
         if (!uploadRes.ok) {
-          setUploadNotice(
-            lang === "ar"
-              ? "تم إرسال البلاغ بدون الصور لأن رفع الصور غير متاح حاليًا."
-              : "Report submitted without images because image upload is currently unavailable."
-          );
+          const uploadBody = (await uploadRes.json().catch(() => ({}))) as { error?: string; details?: string };
+          const reason = String(uploadBody.error || "");
+          const details = String(uploadBody.details || "");
+          if (reason === "service_upload_not_configured") {
+            setUploadNotice(
+              lang === "ar"
+                ? "تم إرسال البلاغ بدون الصور: متغير SUPABASE_SERVICE_ROLE_KEY غير مضبوط على السيرفر."
+                : "Report submitted without images: SUPABASE_SERVICE_ROLE_KEY is not configured on the server."
+            );
+          } else if (reason === "invalid_file_type_or_size") {
+            setUploadNotice(
+              lang === "ar"
+                ? "تم إرسال البلاغ بدون الصور: نوع الصورة غير مدعوم أو الحجم أكبر من الحد المسموح."
+                : "Report submitted without images: image type is not supported or file size exceeds the limit."
+            );
+          } else {
+            const base =
+              lang === "ar"
+                ? "تم إرسال البلاغ بدون الصور لأن رفع الصور غير متاح حاليًا."
+                : "Report submitted without images because image upload is currently unavailable.";
+            setUploadNotice(details ? `${base} (${details})` : base);
+          }
         } else {
           const payload = (await uploadRes.json().catch(() => ({}))) as { urls?: string[] };
           uploadedImageUrls.push(...(payload.urls || []));
