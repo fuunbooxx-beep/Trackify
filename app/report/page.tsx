@@ -437,10 +437,10 @@ function ReportContent() {
             : "Image upload is currently unavailable due to Supabase server configuration. You can submit without images or fix environment variables."
         );
       } else if (/row-level security|permission|not allowed|policy/i.test(message)) {
-        setErrorMsg(
+        setUploadNotice(
           lang === "ar"
-            ? "فشل رفع الصور بسبب صلاحيات Supabase Storage (RLS). تأكد من Policies الخاصة بالـ bucket report-evidence."
-            : "Image upload failed due to Supabase Storage RLS policies. Please verify bucket policies for report-evidence."
+            ? "تم إرسال البلاغ بدون الصور لأن صلاحيات رفع الصور غير متاحة حاليًا."
+            : "Report submitted without images because image upload permissions are currently unavailable."
         );
       } else {
         setErrorMsg(
