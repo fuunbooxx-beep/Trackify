@@ -128,6 +128,8 @@ function ReportContent() {
   const [targetName, setTargetName] = useState(presetTargetName);
   const [targetPhone, setTargetPhone] = useState("");
   const [targetLink, setTargetLink] = useState(presetTargetLink);
+  const [targetSuggestionsOpen, setTargetSuggestionsOpen] = useState(false);
+  const [knownTargets, setKnownTargets] = useState<Array<{ id: string; name: string; link: string }>>([]);
   const [category, setCategory] = useState("scam");
   const [description, setDescription] = useState("");
   const [reporterNameInput, setReporterNameInput] = useState("");
@@ -145,6 +147,50 @@ function ReportContent() {
   const [captchaBroken, setCaptchaBroken] = useState(false);
   const turnstileEnabled = useMemo(() => Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY), []);
   const isAdmin = isAdminUser(user);
+
+  useEffect(() => {
+    let active = true;
+    const loadKnownTargets = async () => {
+      try {
+        const snap = await getDocs(collection(db, "targets"));
+        if (!active) return;
+        const list = snap.docs
+          .map((item) => {
+            const data = item.data() as { name?: string; link?: string; links?: Array<{ url?: string }> };
+            const primaryLink = data.link || data.links?.[0]?.url || "";
+            return {
+              id: item.id,
+              name: String(data.name || "").trim(),
+              link: String(primaryLink || "").trim(),
+            };
+          })
+          .filter((item) => item.name.length > 0);
+        setKnownTargets(list);
+      } catch {
+        // keep suggestions disabled if loading fails
+      }
+    };
+    void loadKnownTargets();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const targetSuggestions = useMemo(() => {
+    const queryText = normalizeTargetName(targetName);
+    if (!queryText || queryText.length < 2 || lockPreset) return [];
+    const ranked = knownTargets
+      .map((item) => {
+        const normalized = normalizeTargetName(item.name);
+        const starts = normalized.startsWith(queryText) ? 2 : 0;
+        const includes = normalized.includes(queryText) ? 1 : 0;
+        return { ...item, score: starts + includes };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, 6);
+    return ranked;
+  }, [knownTargets, lockPreset, targetName]);
 
   useEffect(() => {
     if (!reporterNameInput.trim() && user?.displayName) {
@@ -498,15 +544,47 @@ function ReportContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="font-bold text-sm uppercase tracking-wider text-muted-foreground">{lang === "ar" ? "إسم الصفحة / البائع" : "Page / seller name"} <span className="text-destructive">*</span></label>
-              <input 
-                type="text" 
-                required
-                value={targetName}
-                onChange={(e) => setTargetName(e.target.value)}
-                disabled={lockPreset && Boolean(presetTargetName)}
-                className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue transition-shadow font-medium disabled:opacity-70"
-                placeholder="مثال: Ahmed Store"
-              />
+              <div className="relative">
+                <input 
+                  type="text" 
+                  required
+                  value={targetName}
+                  onChange={(e) => {
+                    setTargetName(e.target.value);
+                    setTargetSuggestionsOpen(true);
+                  }}
+                  onFocus={() => setTargetSuggestionsOpen(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setTargetSuggestionsOpen(false), 120);
+                  }}
+                  disabled={lockPreset && Boolean(presetTargetName)}
+                  className="w-full bg-background border border-border p-3 rounded-xl outline-none focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue transition-shadow font-medium disabled:opacity-70"
+                  placeholder="مثال: Ahmed Store"
+                />
+                {targetSuggestionsOpen && targetSuggestions.length > 0 && (
+                  <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-border bg-background shadow-xl">
+                    <div className="px-3 py-2 text-xs font-bold text-muted-foreground border-b border-border/70">
+                      {lang === "ar" ? "هل تقصد؟" : "Did you mean?"}
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                      {targetSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onMouseDown={() => {
+                            setTargetName(item.name);
+                            if (!targetLink && item.link) setTargetLink(item.link);
+                            setTargetSuggestionsOpen(false);
+                          }}
+                          className="w-full px-3 py-2.5 text-start text-sm font-semibold hover:bg-secondary/70 transition-colors"
+                        >
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">

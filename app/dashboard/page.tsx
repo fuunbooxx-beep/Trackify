@@ -52,7 +52,6 @@ import { findSharedPhoneClusters } from "@/lib/phone-patterns";
 import { classifyEvidenceTier } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
 import { useLanguage } from "@/lib/i18n/context";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const STATUS_OPTIONS = [
   { value: "warning", labelEn: "Warning", labelAr: "تحذير" },
@@ -465,19 +464,25 @@ export default function DashboardPage() {
     setManualSaving(true);
     setErrorMsg("");
     try {
-      const supabase = createSupabaseBrowserClient();
       const uploadedImageUrls: string[] = [];
-      for (let i = 0; i < manualFiles.length; i += 1) {
-        const file = manualFiles[i];
-        const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-        const filePath = `${user.uid}/manual_${Date.now()}_${i}_${safeName}`;
-        const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
-          upsert: false,
-          contentType: file.type,
+      if (manualFiles.length > 0) {
+        const uploadForm = new FormData();
+        uploadForm.set("ownerKey", user.uid);
+        manualFiles.forEach((file) => uploadForm.append("files", file));
+        const uploadRes = await fetch("/api/report/upload-evidence", {
+          method: "POST",
+          body: uploadForm,
         });
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from("report-evidence").getPublicUrl(filePath);
-        uploadedImageUrls.push(data.publicUrl);
+        const uploadBody = (await uploadRes.json().catch(() => ({}))) as {
+          error?: string;
+          details?: string;
+          urls?: string[];
+        };
+        if (!uploadRes.ok) {
+          const details = uploadBody.details ? ` (${uploadBody.details})` : "";
+          throw new Error(`manual_upload_failed${details}`);
+        }
+        uploadedImageUrls.push(...(uploadBody.urls || []));
       }
 
       const reportPayload = {
@@ -572,25 +577,33 @@ export default function DashboardPage() {
     setLogoUploading(true);
     setErrorMsg("");
     try {
-      const supabase = createSupabaseBrowserClient();
-      const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-      const filePath = `${user.uid}/target-logos/${Date.now()}_${safeName}`;
-      const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
-        upsert: false,
-        contentType: file.type,
+      const uploadForm = new FormData();
+      uploadForm.set("ownerKey", `${user.uid}_target_logo`);
+      uploadForm.append("files", file);
+      const uploadRes = await fetch("/api/report/upload-evidence", {
+        method: "POST",
+        body: uploadForm,
       });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from("report-evidence").getPublicUrl(filePath);
-      if (!data?.publicUrl) throw new Error("Failed to resolve uploaded logo URL");
-      setLogoUrl(data.publicUrl);
+      const uploadBody = (await uploadRes.json().catch(() => ({}))) as {
+        error?: string;
+        details?: string;
+        urls?: string[];
+      };
+      if (!uploadRes.ok) {
+        const details = uploadBody.details ? ` (${uploadBody.details})` : "";
+        throw new Error(`logo_upload_failed${details}`);
+      }
+      const firstUrl = uploadBody.urls?.[0];
+      if (!firstUrl) throw new Error("Failed to resolve uploaded logo URL");
+      setLogoUrl(firstUrl);
       setSuccessMsg(lang === "ar" ? "تم رفع اللوجو بنجاح." : "Logo uploaded successfully.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/row-level security|permission|not allowed|policy/i.test(message)) {
+      if (/logo_upload_failed|manual_upload_failed|cloudinary_not_configured|upload_failed/i.test(message)) {
         setErrorMsg(
           lang === "ar"
-            ? "فشل رفع اللوجو بسبب صلاحيات Supabase Storage (RLS). تحقق من Policies للـ bucket report-evidence."
-            : "Logo upload failed due to Supabase Storage RLS policies. Please verify report-evidence bucket policies."
+            ? "فشل رفع الصورة. تأكد من إعدادات Cloudinary في السيرفر."
+            : "Image upload failed. Please verify Cloudinary server configuration."
         );
       } else {
         setErrorMsg(lang === "ar" ? `فشل رفع اللوجو: ${message}` : `Failed to upload logo: ${message}`);
