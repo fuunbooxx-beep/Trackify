@@ -368,7 +368,7 @@ function ReportContent() {
         descriptionHash,
         evidenceImages: uploadedImageUrls,
         evidenceTier,
-        status: isAdmin && reportAsAdmin ? "approved" : "pending",
+        status: "approved",
         adminVerified: isAdmin && reportAsAdmin,
         adminPinned: isAdmin && reportAsAdmin,
         allowUserEdit: false,
@@ -376,33 +376,16 @@ function ReportContent() {
         reviewNote: "",
         source: isAdmin && reportAsAdmin ? "admin_direct" : anonymousMode ? "user_anonymous" : "user",
         createdAt: Date.now(),
-        ...(isAdmin && reportAsAdmin ? { reviewedAt: Date.now() } : {}),
+        reviewedAt: Date.now(),
       });
 
       if (!(isAdmin && reportAsAdmin) && user) {
         await addDoc(collection(db, "notifications"), {
           userId: user.uid,
           reportId: reportRef.id,
-          status: "pending",
-          title: lang === "ar" ? "تم استلام البلاغ" : "Report received",
-          message: lang === "ar" ? "بلاغك اتسجل وبيراجعه فريقنا الآن." : "Your report was submitted and is now under review.",
-          read: false,
-          createdAt: Date.now(),
-        });
-
-        await addDoc(collection(db, "notifications"), {
-          audience: "admin",
-          reportId: reportRef.id,
-          status: "pending_review",
-          title: lang === "ar" ? "بلاغ جديد بانتظار المراجعة" : "New report awaiting review",
-          message:
-            lang === "ar"
-              ? `عميل أرسل بلاغ جديد عن: ${targetName.trim() || "-"}.`
-              : `A customer submitted a new report for: ${targetName.trim() || "-"}.`,
-          targetName: targetName.trim(),
-          targetLink: normalizeUrl(targetLink.trim()),
-          authorId: user.uid,
-          authorEmail: user.email || "",
+          status: "approved",
+          title: lang === "ar" ? "تم نشر البلاغ" : "Report published",
+          message: lang === "ar" ? "تم نشر بلاغك تلقائياً بنجاح." : "Your report has been published automatically.",
           read: false,
           createdAt: Date.now(),
         });
