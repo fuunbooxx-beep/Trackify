@@ -140,20 +140,32 @@ export default function ProfilePage() {
     setAvatarUploading(true);
     setProfileMsg("");
     try {
-      const supabase = createSupabaseBrowserClient();
-      const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-      const filePath = `${user.uid}/avatars/${Date.now()}_${safeName}`;
-      const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
-        upsert: false,
-        contentType: file.type,
+      const uploadForm = new FormData();
+      uploadForm.set("ownerKey", `${user.uid}_avatar`);
+      uploadForm.append("files", file);
+      const uploadRes = await fetch("/api/report/upload-evidence", {
+        method: "POST",
+        body: uploadForm,
       });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from("report-evidence").getPublicUrl(filePath);
-      if (!data?.publicUrl) throw new Error("Failed to resolve uploaded avatar URL");
-      await saveAvatarUrl(data.publicUrl);
+      const uploadBody = (await uploadRes.json().catch(() => ({}))) as {
+        error?: string;
+        details?: string;
+        urls?: string[];
+      };
+      if (!uploadRes.ok) {
+        const details = uploadBody.details ? ` (${uploadBody.details})` : "";
+        throw new Error(`avatar_upload_failed${details}`);
+      }
+      const firstUrl = uploadBody.urls?.[0];
+      if (!firstUrl) throw new Error("Failed to resolve uploaded avatar URL");
+      await saveAvatarUrl(firstUrl);
     } catch (error) {
       console.error(error);
-      setProfileMsg(lang === "ar" ? "\u062a\u0639\u0630\u0631 \u0631\u0641\u0639 \u0627\u0644\u0635\u0648\u0631\u0629." : "Failed to upload photo.");
+      setProfileMsg(
+        lang === "ar"
+          ? "\u062a\u0639\u0630\u0631 \u0631\u0641\u0639 \u0627\u0644\u0635\u0648\u0631\u0629. \u062a\u0623\u0643\u062f \u0645\u0646 \u0625\u0639\u062f\u0627\u062f\u0627\u062a Cloudinary."
+          : "Failed to upload photo. Please verify Cloudinary configuration."
+      );
     } finally {
       setAvatarUploading(false);
     }

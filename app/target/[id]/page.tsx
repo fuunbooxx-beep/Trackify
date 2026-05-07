@@ -53,7 +53,6 @@ import {
   type TargetRecord,
 } from "@/lib/target-utils";
 import { useLanguage } from "@/lib/i18n/context";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getAdminAvatarUrl, getAvatarUrl } from "@/lib/avatar";
 import { classifyEvidenceTier, formatEvidenceTierLabel } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
@@ -100,6 +99,27 @@ export default function TargetDetailsPage() {
   const manualFileInputRef = useRef<HTMLInputElement>(null);
   const { lang } = useLanguage();
   const activeTargetId = String(target?.id || targetId);
+
+  const uploadImagesThroughApi = async (ownerKey: string, files: File[]) => {
+    if (!files.length) return [] as string[];
+    const uploadForm = new FormData();
+    uploadForm.set("ownerKey", ownerKey);
+    files.forEach((file) => uploadForm.append("files", file));
+    const uploadRes = await fetch("/api/report/upload-evidence", {
+      method: "POST",
+      body: uploadForm,
+    });
+    const uploadBody = (await uploadRes.json().catch(() => ({}))) as {
+      error?: string;
+      details?: string;
+      urls?: string[];
+    };
+    if (!uploadRes.ok) {
+      const details = uploadBody.details ? ` (${uploadBody.details})` : "";
+      throw new Error(`image_upload_failed${details}`);
+    }
+    return uploadBody.urls || [];
+  };
 
   const fetchReports = async (overrideTargetId?: string) => {
     const resolvedTargetId = String(overrideTargetId || target?.id || targetId);
@@ -329,20 +349,7 @@ export default function TargetDetailsPage() {
 
     try {
       setSavingReportId(report.id);
-      const supabase = createSupabaseBrowserClient();
-      const uploadedImageUrls: string[] = [];
-      for (let i = 0; i < editNewFiles.length; i += 1) {
-        const file = editNewFiles[i];
-        const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-        const filePath = `${user.uid}/edit_${report.id}_${Date.now()}_${i}_${safeName}`;
-        const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
-          upsert: false,
-          contentType: file.type,
-        });
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from("report-evidence").getPublicUrl(filePath);
-        uploadedImageUrls.push(data.publicUrl);
-      }
+      const uploadedImageUrls = await uploadImagesThroughApi(`${user.uid}_edit_${report.id}`, editNewFiles);
 
       const combinedImages = [...editEvidenceImages, ...uploadedImageUrls].slice(0, 10);
       const patch: Record<string, unknown> = {
@@ -374,7 +381,16 @@ export default function TargetDetailsPage() {
       setActionMsg(lang === "ar" ? "تم تعديل البلاغ بنجاح." : "Report updated successfully.");
     } catch (error) {
       console.error(error);
-      setActionMsg(lang === "ar" ? "تعذر تعديل البلاغ." : "Failed to edit report.");
+      const message = error instanceof Error ? error.message : String(error);
+      if (/image_upload_failed|cloudinary_not_configured|upload_failed/i.test(message)) {
+        setActionMsg(
+          lang === "ar"
+            ? "تعذر رفع صور التعديل. تأكد من إعدادات Cloudinary."
+            : "Failed to upload edit images. Please verify Cloudinary configuration."
+        );
+      } else {
+        setActionMsg(lang === "ar" ? "تعذر تعديل البلاغ." : "Failed to edit report.");
+      }
     } finally {
       setSavingReportId(null);
     }
@@ -554,20 +570,10 @@ export default function TargetDetailsPage() {
     try {
       setCreatingAdminComment(true);
       setActionMsg("");
-      const supabase = createSupabaseBrowserClient();
-      const uploadedImageUrls: string[] = [];
-      for (let i = 0; i < adminCommentFiles.length; i += 1) {
-        const file = adminCommentFiles[i];
-        const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-      const filePath = `${user.uid}/admin_comment_${activeTargetId}_${Date.now()}_${i}_${safeName}`;
-        const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
-          upsert: false,
-          contentType: file.type,
-        });
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from("report-evidence").getPublicUrl(filePath);
-        uploadedImageUrls.push(data.publicUrl);
-      }
+      const uploadedImageUrls = await uploadImagesThroughApi(
+        `${user.uid}_admin_comment_${activeTargetId}`,
+        adminCommentFiles
+      );
 
       // Keep only one pinned item by unpinning previous pinned comments first.
       const pinnedSnap = await getDocs(
@@ -616,7 +622,16 @@ export default function TargetDetailsPage() {
       setActionMsg(lang === "ar" ? "تمت إضافة التعليق الموثق والمثبت بنجاح." : "Verified pinned comment added successfully.");
     } catch (error) {
       console.error(error);
-      setActionMsg(lang === "ar" ? "تعذر إضافة التعليق الموثق." : "Failed to add verified comment.");
+      const message = error instanceof Error ? error.message : String(error);
+      if (/image_upload_failed|cloudinary_not_configured|upload_failed/i.test(message)) {
+        setActionMsg(
+          lang === "ar"
+            ? "تعذر رفع صور التعليق الموثق. تأكد من إعدادات Cloudinary."
+            : "Failed to upload verified-comment images. Please verify Cloudinary configuration."
+        );
+      } else {
+        setActionMsg(lang === "ar" ? "تعذر إضافة التعليق الموثق." : "Failed to add verified comment.");
+      }
     } finally {
       setCreatingAdminComment(false);
     }
@@ -660,20 +675,7 @@ export default function TargetDetailsPage() {
     try {
       setManualSubmitting(true);
       setActionMsg("");
-      const supabase = createSupabaseBrowserClient();
-      const uploadedImageUrls: string[] = [];
-      for (let i = 0; i < manualFiles.length; i += 1) {
-        const file = manualFiles[i];
-        const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-      const filePath = `${user.uid}/manual_target_${activeTargetId}_${Date.now()}_${i}_${safeName}`;
-        const { error: uploadError } = await supabase.storage.from("report-evidence").upload(filePath, file, {
-          upsert: false,
-          contentType: file.type,
-        });
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from("report-evidence").getPublicUrl(filePath);
-        uploadedImageUrls.push(data.publicUrl);
-      }
+      const uploadedImageUrls = await uploadImagesThroughApi(`${user.uid}_manual_target_${activeTargetId}`, manualFiles);
 
       await addDoc(collection(db, "reports"), {
         targetId: activeTargetId,
@@ -711,7 +713,16 @@ export default function TargetDetailsPage() {
       setActionMsg(lang === "ar" ? "تمت إضافة البلاغ اليدوي بنجاح." : "Manual report added successfully.");
     } catch (error) {
       console.error(error);
-      setActionMsg(lang === "ar" ? "تعذر إضافة البلاغ اليدوي." : "Failed to add manual report.");
+      const message = error instanceof Error ? error.message : String(error);
+      if (/image_upload_failed|cloudinary_not_configured|upload_failed/i.test(message)) {
+        setActionMsg(
+          lang === "ar"
+            ? "تعذر رفع صور البلاغ اليدوي. تأكد من إعدادات Cloudinary."
+            : "Failed to upload manual-report images. Please verify Cloudinary configuration."
+        );
+      } else {
+        setActionMsg(lang === "ar" ? "تعذر إضافة البلاغ اليدوي." : "Failed to add manual report.");
+      }
     } finally {
       setManualSubmitting(false);
     }
