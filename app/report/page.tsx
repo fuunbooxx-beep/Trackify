@@ -243,7 +243,7 @@ function ReportContent() {
           }),
         });
         if (!verifyRes.ok) {
-          const body = (await verifyRes.json().catch(() => ({}))) as { error?: string };
+          const body = (await verifyRes.json().catch(() => ({}))) as { error?: string; details?: string[] };
           const reason = body.error || "verification_failed";
           if (reason === "rate_limited") {
             throw new Error(lang === "ar" ? "محاولات كثيرة جدًا. جرّب بعد دقيقة." : "Too many attempts. Please try again in a minute.");
@@ -253,6 +253,24 @@ function ReportContent() {
           }
           if (reason === "abusive_content_detected") {
             throw new Error(lang === "ar" ? "تم رفض البلاغ لأن المحتوى يبدو مخالفًا." : "Submission rejected because content appears abusive.");
+          }
+          if (reason === "turnstile_secret_not_configured") {
+            throw new Error(
+              lang === "ar"
+                ? "إعدادات الأمان غير مكتملة على السيرفر: TURNSTILE_SECRET_KEY غير مضبوط."
+                : "Server security setup is incomplete: TURNSTILE_SECRET_KEY is not configured."
+            );
+          }
+          if (reason === "missing_turnstile_token") {
+            throw new Error(lang === "ar" ? "أكمل اختبار Turnstile ثم أعد المحاولة." : "Complete the Turnstile challenge and try again.");
+          }
+          if (reason === "turnstile_failed") {
+            const details = (body.details || []).join(", ");
+            const base =
+              lang === "ar"
+                ? "فشل التحقق الأمني من Turnstile. أعد تحميل التحدي وحاول مرة أخرى."
+                : "Turnstile verification failed. Refresh the challenge and try again.";
+            throw new Error(details ? `${base} (${details})` : base);
           }
           throw new Error(lang === "ar" ? "فشل التحقق الأمني. أعد المحاولة." : "Security verification failed. Please try again.");
         }

@@ -29,9 +29,11 @@ function isRateLimited(key: string): boolean {
 function isDuplicateSignature(signature: string): boolean {
   const now = Date.now();
   const existing = duplicateWindow.get(signature);
-  if (existing && now - existing < DUPLICATE_WINDOW_MS) return true;
-  duplicateWindow.set(signature, now);
-  return false;
+  return Boolean(existing && now - existing < DUPLICATE_WINDOW_MS);
+}
+
+function markDuplicateSignature(signature: string) {
+  duplicateWindow.set(signature, Date.now());
 }
 
 export async function POST(req: Request) {
@@ -96,6 +98,7 @@ export async function POST(req: Request) {
       );
     }
 
+    markDuplicateSignature(signature);
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ ok: false, error: "verification_failed" }, { status: 500 });
