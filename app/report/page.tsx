@@ -427,10 +427,10 @@ function ReportContent() {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (/row-level security|permission|not allowed|policy|cloudinary_not_configured/i.test(message)) {
-        setUploadNotice(
+        setErrorMsg(
           lang === "ar"
-            ? "تم إرسال البلاغ بدون الصور لأن صلاحيات رفع الصور غير متاحة حاليًا."
-            : "Report submitted without images because image upload permissions are currently unavailable."
+            ? "لا توجد صلاحيات كافية لإكمال إرسال البلاغ. راجع صلاحيات Firestore/البيئة."
+            : "You do not have enough permissions to complete this report submission. Please verify Firestore/environment permissions."
         );
       } else {
         setErrorMsg(
