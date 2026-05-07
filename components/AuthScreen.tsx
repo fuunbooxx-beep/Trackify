@@ -281,14 +281,9 @@ function AuthForm({ initialMode }: { initialMode: "signin" | "signup" }) {
     setSubmitting(true);
     try {
       showRouteLoader();
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNextPath)}`,
-        },
-      });
-      if (error) throw error;
+      const nextParam =
+        safeNextPath !== "/profile" ? `?next=${encodeURIComponent(safeNextPath)}` : "";
+      window.location.assign(`/auth/google${nextParam}`);
     } catch {
       hideRouteLoader();
       setBanner({
