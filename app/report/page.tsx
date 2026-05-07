@@ -292,11 +292,11 @@ function ReportContent() {
           const uploadBody = (await uploadRes.json().catch(() => ({}))) as { error?: string; details?: string };
           const reason = String(uploadBody.error || "");
           const details = String(uploadBody.details || "");
-          if (reason === "service_upload_not_configured") {
+          if (reason === "cloudinary_not_configured") {
             setUploadNotice(
               lang === "ar"
-                ? "تم إرسال البلاغ بدون الصور: متغير SUPABASE_SERVICE_ROLE_KEY غير مضبوط على السيرفر."
-                : "Report submitted without images: SUPABASE_SERVICE_ROLE_KEY is not configured on the server."
+                ? "تم إرسال البلاغ بدون الصور: إعدادات Cloudinary غير مكتملة على السيرفر."
+                : "Report submitted without images: Cloudinary server configuration is incomplete."
             );
           } else if (reason === "invalid_file_type_or_size") {
             setUploadNotice(
@@ -426,7 +426,7 @@ function ReportContent() {
 
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/row-level security|permission|not allowed|policy|service_upload_not_configured/i.test(message)) {
+      if (/row-level security|permission|not allowed|policy|cloudinary_not_configured/i.test(message)) {
         setUploadNotice(
           lang === "ar"
             ? "تم إرسال البلاغ بدون الصور لأن صلاحيات رفع الصور غير متاحة حاليًا."
