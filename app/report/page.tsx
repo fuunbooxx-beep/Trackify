@@ -141,6 +141,7 @@ function ReportContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [uploadNotice, setUploadNotice] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaBroken, setCaptchaBroken] = useState(false);
   const turnstileEnabled = useMemo(() => Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY), []);
@@ -152,7 +153,7 @@ function ReportContent() {
     }
   }, []);
   const supabaseUnavailable = supabase === null;
-  const evidenceBucket = "report-evidence";
+  const evidenceBucket = "report-evidence-v2";
   const isAdmin = isAdminUser(user);
 
   useEffect(() => {
@@ -222,6 +223,7 @@ function ReportContent() {
       return;
     }
     setErrorMsg("");
+    setUploadNotice("");
     setIsSubmitting(true);
 
     try {
@@ -301,7 +303,18 @@ function ReportContent() {
             upsert: false,
             contentType: file.type,
           });
-          if (uploadError) throw uploadError;
+          if (uploadError) {
+            const uploadMessage = String(uploadError.message || uploadError);
+            if (/row-level security|permission|not allowed|policy/i.test(uploadMessage)) {
+              setUploadNotice(
+                lang === "ar"
+                  ? "تم إرسال البلاغ بدون الصور لأن صلاحيات رفع الصور غير متاحة حالياً."
+                  : "Report submitted without images because image upload permissions are currently unavailable."
+              );
+              continue;
+            }
+            throw uploadError;
+          }
 
           const { data } = supabase.storage.from(evidenceBucket).getPublicUrl(filePath);
           uploadedImageUrls.push(data.publicUrl);
@@ -463,6 +476,12 @@ function ReportContent() {
             <div className="bg-destructive/10 border border-destructive/30 text-destructive p-4 rounded-xl flex items-center gap-3 font-semibold">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <span>{errorMsg}</span>
+            </div>
+          )}
+          {uploadNotice && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300 p-4 rounded-xl flex items-center gap-3 font-semibold">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>{uploadNotice}</span>
             </div>
           )}
           {supabaseUnavailable && (
