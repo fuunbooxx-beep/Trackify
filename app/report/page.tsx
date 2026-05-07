@@ -9,7 +9,6 @@ import { db } from "@/lib/firebase";
 import { addDoc, collection, doc, getDocs, limit, query, setDoc, where } from "firebase/firestore";
 import { motion } from "motion/react";
 import { useLanguage } from "@/lib/i18n/context";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { isAdminUser } from "@/lib/auth-user";
 import { getAvatarUrl } from "@/lib/avatar";
 import { detectPlatform, getRiskStatusFromReportCount, getTargetAliases, getTargetLinks, getTargetPhones, getTargetReasons, normalizePhone, normalizeTargetName, normalizeUrl, targetPayload, type TargetRecord } from "@/lib/target-utils";
@@ -145,15 +144,6 @@ function ReportContent() {
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaBroken, setCaptchaBroken] = useState(false);
   const turnstileEnabled = useMemo(() => Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY), []);
-  const supabase = useMemo(() => {
-    try {
-      return createSupabaseBrowserClient();
-    } catch {
-      return null;
-    }
-  }, []);
-  const supabaseUnavailable = supabase === null;
-  const evidenceBucket = "report-evidence-v2";
   const isAdmin = isAdminUser(user);
 
   useEffect(() => {
@@ -291,33 +281,22 @@ function ReportContent() {
 
       const uploadedImageUrls: string[] = [];
       if (files.length > 0) {
-        if (!supabase) {
-          throw new Error("SUPABASE_STORAGE_UNAVAILABLE");
-        }
-        for (let i = 0; i < files.length; i += 1) {
-          const file = files[i];
-          const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
-          const ownerKey = user?.uid || `guest_${Date.now()}`;
-          const filePath = `${ownerKey}/${Date.now()}_${i}_${safeName}`;
-          const { error: uploadError } = await supabase.storage.from(evidenceBucket).upload(filePath, file, {
-            upsert: false,
-            contentType: file.type,
-          });
-          if (uploadError) {
-            const uploadMessage = String(uploadError.message || uploadError);
-            if (/row-level security|permission|not allowed|policy/i.test(uploadMessage)) {
-              setUploadNotice(
-                lang === "ar"
-                  ? "تم إرسال البلاغ بدون الصور لأن صلاحيات رفع الصور غير متاحة حالياً."
-                  : "Report submitted without images because image upload permissions are currently unavailable."
-              );
-              continue;
-            }
-            throw uploadError;
-          }
-
-          const { data } = supabase.storage.from(evidenceBucket).getPublicUrl(filePath);
-          uploadedImageUrls.push(data.publicUrl);
+        const uploadForm = new FormData();
+        uploadForm.set("ownerKey", user?.uid || `guest_${Date.now()}`);
+        files.forEach((file) => uploadForm.append("files", file));
+        const uploadRes = await fetch("/api/report/upload-evidence", {
+          method: "POST",
+          body: uploadForm,
+        });
+        if (!uploadRes.ok) {
+          setUploadNotice(
+            lang === "ar"
+              ? "تم إرسال البلاغ بدون الصور لأن رفع الصور غير متاح حاليًا."
+              : "Report submitted without images because image upload is currently unavailable."
+          );
+        } else {
+          const payload = (await uploadRes.json().catch(() => ({}))) as { urls?: string[] };
+          uploadedImageUrls.push(...(payload.urls || []));
         }
       }
 
@@ -430,13 +409,7 @@ function ReportContent() {
 
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/SUPABASE_STORAGE_UNAVAILABLE/i.test(message)) {
-        setErrorMsg(
-          lang === "ar"
-            ? "رفع الصور غير متاح حالياً بسبب إعدادات Supabase على الخادم. تقدر تكمل البلاغ بدون صور أو اضبط متغيرات البيئة."
-            : "Image upload is currently unavailable due to Supabase server configuration. You can submit without images or fix environment variables."
-        );
-      } else if (/row-level security|permission|not allowed|policy/i.test(message)) {
+      if (/row-level security|permission|not allowed|policy|service_upload_not_configured/i.test(message)) {
         setUploadNotice(
           lang === "ar"
             ? "تم إرسال البلاغ بدون الصور لأن صلاحيات رفع الصور غير متاحة حاليًا."
@@ -482,16 +455,6 @@ function ReportContent() {
             <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300 p-4 rounded-xl flex items-center gap-3 font-semibold">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <span>{uploadNotice}</span>
-            </div>
-          )}
-          {supabaseUnavailable && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 p-4 rounded-xl flex items-center gap-3 font-semibold">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <span>
-                {lang === "ar"
-                  ? "مرفقات الصور متوقفة مؤقتًا بسبب عدم ضبط متغيرات Supabase في Vercel. تقدر تبعت البلاغ بدون صور حاليًا."
-                  : "Image attachments are temporarily unavailable because Supabase env vars are missing on Vercel. You can submit the report without images for now."}
-              </span>
             </div>
           )}
 
