@@ -317,37 +317,33 @@ function ReportContent() {
         }
       }
 
-      let resolvedTargetId = "";
+      const targetPool = (await getDocs(collection(db, "targets"))).docs.map(
+        (item) => ({ id: item.id, ...item.data() } as TargetRecord)
+      );
+      const bestMatch = detectExistingTargetMatch(
+        { targetName: normalizedTargetName, targetPhone: targetPhone, targetLink: targetLink },
+        targetPool
+      );
+      const existingDoc = bestMatch.target;
+      const baseData = existingDoc as TargetRecord | undefined;
+      const resolvedTargetId = existingDoc?.id || `target_${Date.now()}`;
 
-      if (isAdmin && reportAsAdmin) {
-        const targetPool = (await getDocs(collection(db, "targets"))).docs.map(
-          (item) => ({ id: item.id, ...item.data() } as TargetRecord)
-        );
-        const bestMatch = detectExistingTargetMatch(
-          { targetName: normalizedTargetName, targetPhone: targetPhone, targetLink: targetLink },
-          targetPool
-        );
-        const existingDoc = bestMatch.target;
-        const baseData = existingDoc as TargetRecord | undefined;
-        resolvedTargetId = existingDoc?.id || `target_${Date.now()}`;
-
-        const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
-        const mergedPayload = targetPayload({
-          name: targetName.trim(),
-          aliases: baseData ? getTargetAliases(baseData) : [],
-          type: String(baseData?.type || "page"),
-          phones: [targetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
-          links: [{ platform: detectPlatform(targetLink.trim()), url: targetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
-          logoUrl: String(baseData?.logoUrl || ""),
-          status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
-          trustScore: Number(baseData?.trustScore ?? 45),
-          reportCount: nextReportCount,
-          reasons: baseData ? getTargetReasons(baseData) : [],
-          claimedByUserId: String(baseData?.claimedByUserId || ""),
-          createdAt: baseData?.createdAt,
-        });
-        await setDoc(doc(db, "targets", resolvedTargetId), mergedPayload, { merge: true });
-      }
+      const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
+      const mergedPayload = targetPayload({
+        name: targetName.trim(),
+        aliases: baseData ? getTargetAliases(baseData) : [],
+        type: String(baseData?.type || "page"),
+        phones: [targetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
+        links: [{ platform: detectPlatform(targetLink.trim()), url: targetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
+        logoUrl: String(baseData?.logoUrl || ""),
+        status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
+        trustScore: Number(baseData?.trustScore ?? 45),
+        reportCount: nextReportCount,
+        reasons: baseData ? getTargetReasons(baseData) : [],
+        claimedByUserId: String(baseData?.claimedByUserId || ""),
+        createdAt: baseData?.createdAt,
+      });
+      await setDoc(doc(db, "targets", resolvedTargetId), mergedPayload, { merge: true });
 
       const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
       const reportAuthorId = user?.uid || `guest_${Date.now()}`;
