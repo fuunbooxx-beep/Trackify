@@ -585,6 +585,11 @@ function ReportContent() {
                   </div>
                 )}
               </div>
+              <p className="text-xs leading-relaxed text-muted-foreground font-medium">
+                {lang === "ar"
+                  ? "اكتب اسم الصفحة كما هو ظاهر بالضبط، ويفضل نسخه ولصقه لتسهيل الوصول للصفحة."
+                  : "Enter the page name exactly as shown. Copy and paste it if possible so the page is easier to find."}
+              </p>
             </div>
 
             <div className="space-y-2">
