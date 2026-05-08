@@ -1320,7 +1320,7 @@ export default function TargetDetailsPage() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-black text-foreground">{lang === "ar" ? "تاريخ البلاغ" : "Date"}</span>
                             <span className="text-foreground/90">
-                              {new Date(report.createdAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}
+                              {formatRelativeDate(report.createdAt, lang)}
                             </span>
                           </div>
                           </div>
@@ -1497,7 +1497,7 @@ export default function TargetDetailsPage() {
                                 Trackify
                               </span>
                               <span className="text-[11px] font-bold text-muted-foreground">
-                                {reply.createdAt ? new Date(reply.createdAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US") : ""}
+                                {formatRelativeDate(reply.createdAt, lang)}
                               </span>
                               {isAdmin && reply.id && (
                                 <button
@@ -1761,8 +1761,46 @@ function PlatformIcon({ platform, className }: { platform: string; className?: s
   if (platform === "facebook") return <Facebook className={className} />;
   if (platform === "instagram") return <Instagram className={className} />;
   if (platform === "youtube") return <Youtube className={className} />;
+  if (platform === "telegram") return <Send className={className} />;
   if (platform === "website") return <Globe2 className={className} />;
   return <LinkIcon className={className} />;
+}
+
+function formatRelativeDate(value: unknown, lang: "ar" | "en") {
+  const timestamp = Number(value || 0);
+  if (!timestamp) return "";
+
+  const now = Date.now();
+  const diffMs = Math.max(0, now - timestamp);
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(diffMs / 3600000);
+  const days = Math.floor(diffMs / 86400000);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
+
+  if (lang === "ar") {
+    if (minutes < 1) return "منذ أقل من دقيقة";
+    if (minutes < 60) return `منذ ${formatArabicUnit(minutes, "دقيقة", "دقيقتين", "دقائق", "دقيقة")}`;
+    if (hours < 24) return `منذ ${formatArabicUnit(hours, "ساعة", "ساعتين", "ساعات", "ساعة")}`;
+    if (days < 30) return `منذ ${formatArabicUnit(days, "يوم", "يومين", "أيام", "يوم")}`;
+    if (months < 12) return `منذ ${formatArabicUnit(months, "شهر", "شهرين", "أشهر", "شهر")}`;
+    return `منذ ${formatArabicUnit(years, "سنة", "سنتين", "سنوات", "سنة")}`;
+  }
+
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+}
+
+function formatArabicUnit(count: number, one: string, two: string, few: string, many: string) {
+  if (count <= 0) return "";
+  if (count === 1) return one;
+  if (count === 2) return two;
+  if (count <= 10) return `${count} ${few}`;
+  return `${count} ${many}`;
 }
 
 function clamp(n: number, min: number, max: number) {

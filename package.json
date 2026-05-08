@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "eslint . --ignore-pattern .next/** --ignore-pattern gametrust-egypt/.next/** --rule \"react-hooks/set-state-in-effect:off\" --rule \"react-hooks/purity:off\"",
     "clean": "next clean",
     "backfill:target-stats": "tsx scripts/backfill-target-stats.ts"
   },

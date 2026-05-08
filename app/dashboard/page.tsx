@@ -24,6 +24,7 @@ import {
   Plus,
   PlusCircle,
   Save,
+  Send,
   Trash2,
   UploadCloud,
   Youtube,
@@ -35,6 +36,7 @@ import {
   getTargetCategoryLabel,
   getTargetHref,
   getTargetAliases,
+  getTargetInstapays,
   getTargetLinks,
   getTargetPhones,
   getTargetReasons,
@@ -67,6 +69,7 @@ const PLATFORM_OPTIONS = [
   { value: "tiktok", label: "TikTok" },
   { value: "youtube", label: "YouTube" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "telegram", label: "Telegram" },
   { value: "website", label: "Website" },
 ];
 
@@ -85,6 +88,7 @@ export default function DashboardPage() {
   const [type, setType] = useState("page");
   const [category, setCategory] = useState("gaming");
   const [phones, setPhones] = useState<string[]>([""]);
+  const [instapays, setInstapays] = useState<string[]>([""]);
   const [links, setLinks] = useState<TargetLink[]>([{ ...emptyLink }]);
   const [logoUrl, setLogoUrl] = useState("");
   const [status, setStatus] = useState("reviewing");
@@ -151,11 +155,13 @@ export default function DashboardPage() {
       const idValue = String(target.id || "").toLowerCase();
       const aliasesValue = getTargetAliases(target).join(" ").toLowerCase();
       const phonesValue = getTargetPhones(target).join(" ");
+      const instapayValue = getTargetInstapays(target).join(" ").toLowerCase();
       return (
         nameValue.includes(query) ||
         idValue.includes(query) ||
         aliasesValue.includes(query) ||
-        phonesValue.includes(query)
+        phonesValue.includes(query) ||
+        instapayValue.includes(query)
       );
     });
   }, [targets, targetSearch, targetCategoryFilter]);
@@ -176,6 +182,7 @@ export default function DashboardPage() {
     setType("page");
     setCategory("gaming");
     setPhones([""]);
+    setInstapays([""]);
     setLinks([{ ...emptyLink }]);
     setLogoUrl("");
     setStatus("reviewing");
@@ -189,6 +196,7 @@ export default function DashboardPage() {
 
   const applyTarget = (id: string, target: TargetRecord) => {
     const normalizedPhones = getTargetPhones(target);
+    const normalizedInstapays = getTargetInstapays(target);
     const normalizedLinks = getTargetLinks(target);
     setTargetId(id);
     setCreatedAt(target.createdAt);
@@ -197,6 +205,7 @@ export default function DashboardPage() {
     setType(target.type || "page");
     setCategory(String(target.category || "gaming"));
     setPhones(normalizedPhones.length ? normalizedPhones : [""]);
+    setInstapays(normalizedInstapays.length ? normalizedInstapays : [""]);
     setLinks(normalizedLinks.length ? normalizedLinks : [{ ...emptyLink }]);
     setLogoUrl(target.logoUrl || "");
     setStatus(target.status || "reviewing");
@@ -344,6 +353,7 @@ export default function DashboardPage() {
         type: String(report.targetType || baseData?.type || "page"),
         category: String(baseData?.category || "gaming"),
         phones: [String(report.targetPhone || ""), ...(baseData ? getTargetPhones(baseData) : [])],
+        instapays: baseData ? getTargetInstapays(baseData) : [],
         links: [{ platform: detectPlatform(String(report.targetLink || "")), url: String(report.targetLink || "") }, ...(baseData ? getTargetLinks(baseData) : [])],
         logoUrl: String(baseData?.logoUrl || ""),
         status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
@@ -503,6 +513,7 @@ export default function DashboardPage() {
         type: String(baseData?.type || "page"),
         category: String(baseData?.category || "gaming"),
         phones: [manualTargetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
+        instapays: baseData ? getTargetInstapays(baseData) : [],
         links: [{ platform: detectPlatform(manualTargetLink.trim()), url: manualTargetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
         logoUrl: String(baseData?.logoUrl || ""),
         status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
@@ -617,6 +628,10 @@ export default function DashboardPage() {
     setPhones((current) => current.map((phone, i) => (i === index ? value : phone)));
   };
 
+  const updateInstapay = (index: number, value: string) => {
+    setInstapays((current) => current.map((item, i) => (i === index ? value : item)));
+  };
+
   const updateAlias = (index: number, value: string) => {
     setAliases((current) => current.map((alias, i) => (i === index ? value : alias)));
   };
@@ -634,6 +649,10 @@ export default function DashboardPage() {
 
   const removePhone = (index: number) => {
     setPhones((current) => (current.length === 1 ? [""] : current.filter((_, i) => i !== index)));
+  };
+
+  const removeInstapay = (index: number) => {
+    setInstapays((current) => (current.length === 1 ? [""] : current.filter((_, i) => i !== index)));
   };
 
   const removeAlias = (index: number) => {
@@ -774,6 +793,7 @@ export default function DashboardPage() {
         type,
         category,
         phones,
+        instapays,
         links,
         logoUrl,
         status: getRiskStatusFromReportCount(reportCount, status),
@@ -943,6 +963,20 @@ export default function DashboardPage() {
                 ))}
               </DynamicSection>
 
+              <DynamicSection title={lang === "ar" ? "Instapay" : "Instapay"} action={lang === "ar" ? "إضافة حساب" : "Add handle"} onAdd={() => setInstapays((current) => [...current, ""])}>
+                {instapays.map((instapay, index) => (
+                  <div key={index} className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Send className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted-foreground" />
+                      <input value={instapay} onChange={(e) => updateInstapay(index, e.target.value)} dir="ltr" className="input pl-10" placeholder="instapay username / wallet" />
+                    </div>
+                    <IconButton label={lang === "ar" ? "حذف حساب Instapay" : "Delete Instapay"} onClick={() => removeInstapay(index)}>
+                      <Trash2 className="w-4 h-4" />
+                    </IconButton>
+                  </div>
+                ))}
+              </DynamicSection>
+
               <DynamicSection title={lang === "ar" ? "\u0623\u0633\u0645\u0627\u0621 \u0623\u062e\u0631\u0649 \u0644\u0644\u0635\u0641\u062d\u0629" : "Other page names"} action={lang === "ar" ? "\u0625\u0636\u0627\u0641\u0629 \u0627\u0633\u0645" : "Add name"} onAdd={() => setAliases((current) => [...current, ""])}>
                 {aliases.map((alias, index) => (
                   <div key={index} className="flex gap-2">
@@ -1080,7 +1114,7 @@ export default function DashboardPage() {
                   value={targetSearch}
                   onChange={(e) => setTargetSearch(e.target.value)}
                   className="input"
-                  placeholder={lang === "ar" ? "ابحث بالاسم / ID / رقم الهاتف" : "Search by name / ID / phone"}
+                  placeholder={lang === "ar" ? "ابحث بالاسم / ID / رقم الهاتف / Instapay" : "Search by name / ID / phone / instapay"}
                 />
                 <select
                   value={targetCategoryFilter}
@@ -1655,6 +1689,7 @@ function PlatformIcon({ platform, className }: { platform: string; className?: s
   if (platform === "facebook") return <Facebook className={className} />;
   if (platform === "instagram") return <Instagram className={className} />;
   if (platform === "youtube") return <Youtube className={className} />;
+  if (platform === "telegram") return <Send className={className} />;
   if (platform === "website") return <Globe2 className={className} />;
   return <LinkIcon className={className} />;
 }

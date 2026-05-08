@@ -15,6 +15,7 @@ import {
   Link as LinkIcon,
   Loader2,
   Phone,
+  Send,
   ShieldCheck,
   Store,
   Youtube,
@@ -273,6 +274,7 @@ function PlatformIcon({ platform, className }: { platform: string; className?: s
   if (platform === "facebook") return <Facebook className={className} />;
   if (platform === "instagram") return <Instagram className={className} />;
   if (platform === "youtube") return <Youtube className={className} />;
+  if (platform === "telegram") return <Send className={className} />;
   if (platform === "website") return <Globe2 className={className} />;
   return <LinkIcon className={className} />;
 }

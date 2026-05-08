@@ -30,7 +30,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       supabase = createSupabaseBrowserClient();
     } catch {
       window.clearTimeout(loadingFallback);
-      setLoading(false);
+      window.setTimeout(() => {
+        if (alive) setLoading(false);
+      }, 0);
       return;
     }
 

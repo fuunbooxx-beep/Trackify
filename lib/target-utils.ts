@@ -26,6 +26,8 @@ export type TargetRecord = {
   type?: string;
   phone?: string;
   phones?: string[];
+  instapay?: string;
+  instapays?: string[];
   link?: string;
   links?: TargetLink[];
   logoUrl?: string | null;
@@ -272,6 +274,7 @@ export function detectPlatform(url: string) {
   if (lower.includes("tiktok.com")) return "tiktok";
   if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "youtube";
   if (lower.includes("wa.me") || lower.includes("whatsapp.com")) return "whatsapp";
+  if (lower.includes("t.me/") || lower.includes("telegram.me/") || lower.includes("telegram.org/")) return "telegram";
   return "website";
 }
 
@@ -282,6 +285,7 @@ export function platformLabel(platform: string) {
     tiktok: "TikTok",
     youtube: "YouTube",
     whatsapp: "WhatsApp",
+    telegram: "Telegram",
     website: "Website",
   };
   return labels[platform] || platform || "Website";
@@ -422,6 +426,18 @@ export function getTargetPhones(target: TargetRecord) {
   return Array.from(new Set([...phones, ...fallback].map(normalizePhone).filter(Boolean)));
 }
 
+export function getTargetInstapays(target: TargetRecord) {
+  const values = Array.isArray(target.instapays) ? target.instapays : [];
+  const fallback = target.instapay ? [target.instapay] : [];
+  return Array.from(
+    new Set(
+      [...values, ...fallback]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 export function getTargetLinks(target: TargetRecord) {
   const links = Array.isArray(target.links) ? target.links : [];
   const fallback = target.link ? [{ platform: detectPlatform(target.link), url: target.link }] : [];
@@ -484,6 +500,7 @@ export function targetPayload(input: {
   aliases?: string[];
   type: string;
   phones: string[];
+  instapays?: string[];
   links: TargetLink[];
   logoUrl: string;
   status: string;
@@ -495,6 +512,7 @@ export function targetPayload(input: {
   createdAt?: number;
 }) {
   const phones = input.phones.map(normalizePhone).filter(Boolean);
+  const instapays = (input.instapays || []).map((item) => String(item || "").trim()).filter(Boolean);
   const links = input.links
     .map((link) => ({
       platform: link.platform || detectPlatform(link.url),
@@ -512,6 +530,8 @@ export function targetPayload(input: {
     type: input.type.trim().toLowerCase() || "page",
     phone: phones[0] || "",
     phones,
+    instapay: instapays[0] || "",
+    instapays,
     link: links[0]?.url || "",
     links,
     logoUrl: input.logoUrl.trim() || null,
@@ -521,7 +541,7 @@ export function targetPayload(input: {
     reasons,
     category,
     claimedByUserId: input.claimedByUserId.trim() || null,
-    searchTerms: [...generateSearchTerms(input.name, phones, links, aliases), category],
+    searchTerms: [...generateSearchTerms(input.name, phones, links, aliases), ...instapays.map((item) => item.toLowerCase()), category],
     createdAt: input.createdAt || now,
     updatedAt: now,
   };
