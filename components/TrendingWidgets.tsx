@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
@@ -37,10 +37,10 @@ export function TopAlerts() {
 
   if (loading) return <LoadingList />;
   if (!targets.length) {
-    return <EmptyList tone="danger" text={lang === "ar" ? "لا توجد صفحات خطرة مسجلة حاليا" : "No high-risk pages found yet"} />;
+    return <EmptyList tone="danger" text={lang === "ar" ? "لا يوجد شيء للعرض الآن، سيتم إضافة نتائج قريبًا." : "Nothing to show now. Results will appear soon."} />;
   }
 
-  return <PaginatedTrendList targets={targets} tone="danger" />;
+  return <CompactTrendList targets={targets} tone="danger" />;
 }
 
 export function TopSafePage() {
@@ -49,10 +49,10 @@ export function TopSafePage() {
 
   if (loading) return <LoadingList />;
   if (!targets.length) {
-    return <EmptyList tone="safe" text={lang === "ar" ? "لا توجد صفحات موثوقة مسجلة حاليا" : "No trusted pages found yet"} />;
+    return <EmptyList tone="safe" text={lang === "ar" ? "لا يوجد شيء للعرض الآن، سيتم إضافة نتائج قريبًا." : "Nothing to show now. Results will appear soon."} />;
   }
 
-  return <PaginatedTrendList targets={targets} tone="safe" />;
+  return <CompactTrendList targets={targets} tone="safe" />;
 }
 
 function useTrendingTargets(status: string) {
@@ -83,65 +83,23 @@ function useTrendingTargets(status: string) {
   return { targets, loading };
 }
 
-function PaginatedTrendList({ targets, tone }: { targets: TargetRecord[]; tone: "danger" | "safe" }) {
+function CompactTrendList({ targets, tone }: { targets: TargetRecord[]; tone: "danger" | "safe" }) {
   const { lang } = useLanguage();
-  const [page, setPage] = useState(0);
-  const pageSize = 4;
-  const pageCount = Math.max(1, Math.ceil(targets.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const start = safePage * pageSize;
-  const visibleTargets = targets.slice(start, start + pageSize);
-  const isRtl = lang === "ar";
-
-  const goPrevious = () => setPage(Math.max(0, safePage - 1));
-  const goNext = () => setPage(Math.min(pageCount - 1, safePage + 1));
+  const visibleTargets = useMemo(() => targets.slice(0, 3), [targets]);
 
   return (
     <div className="space-y-3">
-      <div className="trend-inner flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3 dark:border-border dark:bg-card/80 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-muted-foreground">
-            {tone === "danger"
-              ? lang === "ar" ? "أعلى البلاغات" : "Highest reports"
-              : lang === "ar" ? "أعلى الثقة" : "Highest trust"}
-          </p>
-          <p className="mt-1 text-xs font-bold text-slate-700 dark:text-foreground sm:text-sm">
-            {lang === "ar"
-              ? `عرض ${start + 1}-${Math.min(start + pageSize, targets.length)} من ${targets.length} نتيجة`
-              : `Showing ${start + 1}-${Math.min(start + pageSize, targets.length)} of ${targets.length} results`}
-          </p>
-        </div>
-
-        {pageCount > 1 && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={isRtl ? goNext : goPrevious}
-              disabled={isRtl ? safePage >= pageCount - 1 : safePage <= 0}
-              className="trend-inner grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border dark:text-muted-foreground"
-              aria-label={lang === "ar" ? "السابق" : "Previous"}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="trend-inner min-w-16 rounded-full bg-white px-3 py-2 text-center text-xs font-black text-slate-600 dark:bg-background dark:text-slate-200">
-              {safePage + 1} / {pageCount}
-            </span>
-            <button
-              type="button"
-              onClick={isRtl ? goPrevious : goNext}
-              disabled={isRtl ? safePage <= 0 : safePage >= pageCount - 1}
-              className="trend-inner grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border dark:text-muted-foreground"
-              aria-label={lang === "ar" ? "التالي" : "Next"}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+      <div className="trend-inner rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-border dark:bg-card/80 sm:px-4">
+        <p className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-muted-foreground">
+          {tone === "danger"
+            ? lang === "ar" ? "أعلى 3 بلاغات" : "Top 3 by reports"
+            : lang === "ar" ? "أعلى 3 ثقة" : "Top 3 by trust score"}
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {visibleTargets.map((target, index) => (
-          <TrendingCard key={target.id} target={target} rank={start + index + 1} tone={tone} />
+          <TrendingCard key={target.id} target={target} rank={index + 1} tone={tone} />
         ))}
       </div>
     </div>
@@ -198,13 +156,12 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
               </span>
             </div>
 
-            <div className="mt-2.5 grid grid-cols-2 gap-2">
+            <div className="mt-2.5 grid grid-cols-1 gap-2">
               <MiniStat
                 label={isDanger ? (lang === "ar" ? "البلاغات" : "Reports") : lang === "ar" ? "الثقة" : "Score"}
                 value={isDanger ? Number(target.reportCount || 0) : `${Number(target.trustScore || 0)}%`}
                 tone={tone}
               />
-              <MiniStat label={lang === "ar" ? "الروابط" : "Links"} value={links.length} tone={tone} />
             </div>
 
             <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-200">

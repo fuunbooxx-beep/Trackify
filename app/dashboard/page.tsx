@@ -73,6 +73,8 @@ const PLATFORM_OPTIONS = [
   { value: "website", label: "Website" },
 ];
 
+const INSTAPAY_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/2/20/InstaPay_Logo.png";
+
 const emptyLink: TargetLink = { platform: "facebook", url: "" };
 
 export default function DashboardPage() {
@@ -967,7 +969,11 @@ export default function DashboardPage() {
                 {instapays.map((instapay, index) => (
                   <div key={index} className="flex gap-2">
                     <div className="relative flex-1">
-                      <Send className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted-foreground" />
+                      <img
+                        src={INSTAPAY_ICON_URL}
+                        alt="Instapay"
+                        className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 object-contain brightness-0 invert"
+                      />
                       <input value={instapay} onChange={(e) => updateInstapay(index, e.target.value)} dir="ltr" className="input pl-10" placeholder="instapay username / wallet" />
                     </div>
                     <IconButton label={lang === "ar" ? "حذف حساب Instapay" : "Delete Instapay"} onClick={() => removeInstapay(index)}>

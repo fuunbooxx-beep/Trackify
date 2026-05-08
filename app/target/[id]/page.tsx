@@ -39,6 +39,7 @@ import {
   extractTargetIdFromSlug,
   getTargetHref,
   getTargetAliases,
+  getTargetInstapays,
   getTargetLinks,
   getTargetPhones,
   getTargetCategoryLabel,
@@ -56,6 +57,8 @@ import { useLanguage } from "@/lib/i18n/context";
 import { getAdminAvatarUrl, getAvatarUrl } from "@/lib/avatar";
 import { classifyEvidenceTier, formatEvidenceTierLabel } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
+
+const INSTAPAY_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/2/20/InstaPay_Logo.png";
 
 export default function TargetDetailsPage() {
   const params = useParams();
@@ -248,6 +251,7 @@ export default function TargetDetailsPage() {
   }
 
   const phones = getTargetPhones(target);
+  const instapays = getTargetInstapays(target);
   const links = getTargetLinks(target);
   const aliases = getTargetAliases(target);
   const categorySlug = normalizeTargetCategory(target.category);
@@ -906,6 +910,17 @@ export default function TargetDetailsPage() {
                           </InfoGroup>
                         )}
 
+                        {instapays.length > 0 && (
+                          <InfoGroup title={lang === "ar" ? "Instapay" : "Instapay"}>
+                            {instapays.map((handle) => (
+                              <span key={handle} dir="ltr" className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-bold text-muted-foreground">
+                                <img src={INSTAPAY_ICON_URL} alt="Instapay" className="h-5 w-5 object-contain brightness-0 invert" />
+                                {handle}
+                              </span>
+                            ))}
+                          </InfoGroup>
+                        )}
+
                         {links.length > 0 && (
                           <InfoGroup title={lang === "ar" ? "روابط الصفحات" : "Page links"}>
                             {links.map((link) => (
@@ -920,10 +935,10 @@ export default function TargetDetailsPage() {
                           </InfoGroup>
                         )}
 
-                        {phones.length === 0 && links.length === 0 && (
+                        {phones.length === 0 && instapays.length === 0 && links.length === 0 && (
                           <div className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-center">
                             <p className="text-sm font-bold text-muted-foreground">
-                              {lang === "ar" ? "لا توجد أرقام أو روابط مضافة لهذا الهدف بعد." : "No phone numbers or links have been added for this target yet."}
+                              {lang === "ar" ? "لا توجد أرقام أو حسابات Instapay أو روابط مضافة لهذا الهدف بعد." : "No phone numbers, instapay handles, or links have been added for this target yet."}
                             </p>
                           </div>
                         )}
