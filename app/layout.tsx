@@ -3,6 +3,7 @@ import './globals.css';
 import { Providers } from '@/lib/providers';
 import { Cairo, Inter } from 'next/font/google';
 import { SiteFooter } from '@/components/SiteFooter';
+import { RouteTitle } from '@/components/RouteTitle';
 import Script from 'next/script';
 
 const cairo = Cairo({
@@ -17,8 +18,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Trackify - Detect Scam Gaming Pages & Sellers',
+  title: 'Trackify | Trust Check',
   description: 'Trackify helps detect scam gaming pages and sellers with trust scores and user reports.',
+  icons: {
+    icon: 'https://res.cloudinary.com/dv4qomvdt/image/upload/c_crop,g_center,w_400,h_400/c_fill,w_64,h_64/v1778340096/ChatGPT_Image_May_9_2026_06_21_15_PM_gwhs9o.png?tabicon=6',
+    shortcut:
+      'https://res.cloudinary.com/dv4qomvdt/image/upload/c_crop,g_center,w_400,h_400/c_fill,w_64,h_64/v1778340096/ChatGPT_Image_May_9_2026_06_21_15_PM_gwhs9o.png?tabicon=6',
+    apple:
+      'https://res.cloudinary.com/dv4qomvdt/image/upload/c_crop,g_center,w_400,h_400/c_fill,w_180,h_180/v1778340096/ChatGPT_Image_May_9_2026_06_21_15_PM_gwhs9o.png?tabicon=6',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -81,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <Providers>
+          <RouteTitle />
           {children}
           <SiteFooter />
         </Providers>
