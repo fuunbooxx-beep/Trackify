@@ -42,6 +42,13 @@ export type TargetRecord = {
   lastSuccessAt?: number;
   claimedByUserId?: string | null;
   searchTerms?: string[];
+  about?: {
+    title?: string;
+    description?: string;
+    evidenceImages?: string[];
+    addedBy?: "admins" | "moderators" | string;
+    updatedAt?: number;
+  };
   createdAt?: number;
   updatedAt?: number;
 };

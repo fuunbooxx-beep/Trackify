@@ -754,6 +754,13 @@ export default function TargetDetailsPage() {
                       {target.type || "page"}
                     </span>
                     <Link
+                      href={`/target/${encodeURIComponent(activeTargetId)}/about`}
+                      className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-black text-foreground transition hover:bg-secondary/60"
+                    >
+                      <BadgeInfo className="h-4 w-4" />
+                      <span>{lang === "ar" ? "عن الصفحة" : "About"}</span>
+                    </Link>
+                    <Link
                       href={`/category#${categorySlug}`}
                       className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-black text-primary transition hover:bg-primary/15 dark:border-neon-blue/30 dark:bg-neon-blue/10 dark:text-neon-blue"
                     >
