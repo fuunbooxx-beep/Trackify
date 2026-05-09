@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { AuthContext } from "@/lib/providers";
 import { isAdminUser } from "@/lib/auth-user";
@@ -60,6 +60,53 @@ import { syncTargetStats } from "@/lib/trust-score";
 
 const INSTAPAY_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/2/20/InstaPay_Logo.png";
 
+type ReportSortMode = "pinned_then_newest" | "newest" | "oldest";
+
+const REPORT_TEXT_COLLAPSE_AT_CHARS = 320;
+const REPORT_TEXT_COLLAPSE_AT_LINES = 7;
+
+function sortReportsList(list: any[], mode: ReportSortMode) {
+  const next = [...list];
+  const byNewest = (a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0);
+  const byOldest = (a: any, b: any) => Number(a.createdAt || 0) - Number(b.createdAt || 0);
+  if (mode === "oldest") return next.sort(byOldest);
+  if (mode === "newest") return next.sort(byNewest);
+  return next.sort((a, b) => {
+    const aPinned = a.adminPinned === true ? 1 : 0;
+    const bPinned = b.adminPinned === true ? 1 : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
+    return byNewest(a, b);
+  });
+}
+
+function CollapsibleReportText({ text, lang }: { text: string; lang: "en" | "ar" }) {
+  const [expanded, setExpanded] = useState(false);
+  const full = String(text ?? "");
+  const lineCount = full.split(/\r?\n/).length;
+  const needsToggle = full.length > REPORT_TEXT_COLLAPSE_AT_CHARS || lineCount > REPORT_TEXT_COLLAPSE_AT_LINES;
+  const showLess = lang === "ar" ? "عرض أقل" : "Show less";
+  const showMore = lang === "ar" ? "عرض المزيد" : "Show more";
+
+  return (
+    <div>
+      <p
+        className={`whitespace-pre-wrap text-sm leading-7 font-semibold text-foreground md:text-base ${!expanded && needsToggle ? "line-clamp-6" : ""}`}
+      >
+        {full}
+      </p>
+      {needsToggle ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 text-sm font-black text-primary hover:underline dark:text-neon-blue"
+        >
+          {expanded ? showLess : showMore}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export default function TargetDetailsPage() {
   const params = useParams();
   const routeToken = String(params.id || "");
@@ -96,12 +143,15 @@ export default function TargetDetailsPage() {
   const [manualFiles, setManualFiles] = useState<File[]>([]);
   const [manualPreviews, setManualPreviews] = useState<string[]>([]);
   const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [reportSort, setReportSort] = useState<ReportSortMode>("newest");
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title: string } | null>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const adminCommentFileInputRef = useRef<HTMLInputElement>(null);
   const manualFileInputRef = useRef<HTMLInputElement>(null);
   const { lang } = useLanguage();
   const activeTargetId = String(target?.id || targetId);
+
+  const sortedReports = useMemo(() => sortReportsList(reports, reportSort), [reports, reportSort]);
 
   const uploadImagesThroughApi = async (ownerKey: string, files: File[]) => {
     if (!files.length) return [] as string[];
@@ -130,16 +180,7 @@ export default function TargetDetailsPage() {
     const reportsRef = collection(db, "reports");
     const reportsQuery = query(reportsRef, where("targetId", "==", resolvedTargetId));
     const reportsSnap = await getDocs(reportsQuery);
-    setReports(
-      reportsSnap.docs
-        .map((item) => ({ id: item.id, ...item.data() }))
-        .sort((a: any, b: any) => {
-          const aPinned = a.adminPinned === true ? 1 : 0;
-          const bPinned = b.adminPinned === true ? 1 : 0;
-          if (aPinned !== bPinned) return bPinned - aPinned;
-          return Number(b.createdAt || 0) - Number(a.createdAt || 0);
-        })
-    );
+    setReports(reportsSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
   };
 
   const refreshTargetAfterReportChange = async () => {
@@ -1285,7 +1326,26 @@ export default function TargetDetailsPage() {
             </div>
           ) : (
             <div className="grid gap-6">
-              {reports.map((report, idx) => (
+              <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:bg-card/60">
+                <p className="text-sm font-bold text-muted-foreground">
+                  {lang === "ar" ? `عدد البلاغات: ${reports.length}` : `${reports.length} reports`}
+                </p>
+                <label className="flex flex-col gap-1.5 text-sm font-bold sm:flex-row sm:items-center sm:gap-3">
+                  <span className="shrink-0 text-foreground">{lang === "ar" ? "ترتيب البلاغات" : "Sort reports"}</span>
+                  <select
+                    value={reportSort}
+                    onChange={(e) => setReportSort(e.target.value as ReportSortMode)}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary dark:bg-slate-950 dark:focus:ring-neon-blue sm:w-auto"
+                  >
+                    <option value="newest">{lang === "ar" ? "الأحدث أولاً" : "Newest first"}</option>
+                    <option value="oldest">{lang === "ar" ? "الأقدم أولاً" : "Oldest first"}</option>
+                    <option value="pinned_then_newest">
+                      {lang === "ar" ? "المثبّت أولاً ثم الأحدث" : "Pinned first, then newest"}
+                    </option>
+                  </select>
+                </label>
+              </div>
+              {sortedReports.map((report, idx) => (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1518,9 +1578,7 @@ export default function TargetDetailsPage() {
                     </div>
                   ) : (
                     <div className="mt-5 rounded-3xl border border-border/70 bg-background/70 p-5 shadow-sm dark:bg-background/80">
-                      <p className="whitespace-pre-wrap text-sm leading-7 font-semibold text-foreground md:text-base">
-                        {report.description}
-                      </p>
+                      <CollapsibleReportText text={String(report.description || "")} lang={lang} />
                     </div>
                   )}
 
@@ -1550,7 +1608,7 @@ export default function TargetDetailsPage() {
                                 </button>
                               )}
                             </div>
-                            <p className="whitespace-pre-wrap text-sm leading-7 font-semibold text-foreground">{reply.text}</p>
+                            <CollapsibleReportText text={String(reply.text || "")} lang={lang} />
                           </div>
                         ))}
 
