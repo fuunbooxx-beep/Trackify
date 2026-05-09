@@ -27,13 +27,19 @@ export function assignWithRouteLoader(href: string) {
 export function RouteLoadingController() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
 
   useEffect(() => {
     hideRouteLoader();
-    window.requestAnimationFrame(() => {
+    const scrollToTop = () => {
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    });
-  }, [pathname, searchParams]);
+    };
+
+    window.requestAnimationFrame(scrollToTop);
+    // Some transitions/layouts can restore scroll after first paint.
+    const fallbackTimer = window.setTimeout(scrollToTop, 80);
+    return () => window.clearTimeout(fallbackTimer);
+  }, [pathname, searchKey]);
 
   useEffect(() => {
     if ("scrollRestoration" in window.history) {

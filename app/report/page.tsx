@@ -449,6 +449,9 @@ function ReportContent() {
       }
       setCaptchaToken("");
       setSuccess(true);
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      });
 
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
