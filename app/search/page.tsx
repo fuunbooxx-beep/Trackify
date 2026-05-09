@@ -10,133 +10,16 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { useLanguage } from "@/lib/i18n/context";
 import {
-  evaluateTargetCategoryTextMatch,
   getStatusLabel,
-  getTargetAliases,
   getTargetCategoryLabel,
   getTargetHref,
-  getTargetLinks,
-  getTargetPhones,
   hostFromUrl,
-  normalizePhone,
   normalizeTargetCategory,
-  normalizeTargetName,
-  normalizeUrl,
   type TargetRecord,
 } from "@/lib/target-utils";
+import { scoreTarget } from "@/lib/target-search-score";
 
 type ScoredTarget = TargetRecord & { id: string; searchScore: number };
-
-function compactSearchText(value: string) {
-  return normalizeTargetName(value).replace(/\s+/g, "");
-}
-
-function levenshteinDistance(a: string, b: string) {
-  if (a === b) return 0;
-  if (!a) return b.length;
-  if (!b) return a.length;
-
-  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  const current = Array.from({ length: b.length + 1 }, () => 0);
-
-  for (let i = 1; i <= a.length; i += 1) {
-    current[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + cost);
-    }
-    for (let j = 0; j <= b.length; j += 1) previous[j] = current[j];
-  }
-
-  return previous[b.length];
-}
-
-function fuzzyScore(queryText: string, candidateText: string) {
-  if (!queryText || !candidateText) return 0;
-
-  const queryCompact = compactSearchText(queryText);
-  const candidateCompact = compactSearchText(candidateText);
-  const queryWords = normalizeTargetName(queryText).split(/\s+/).filter(Boolean);
-  const candidateWords = normalizeTargetName(candidateText).split(/\s+/).filter(Boolean);
-
-  if (!queryCompact || !candidateCompact) return 0;
-  if (candidateCompact === queryCompact) return 100;
-  if (candidateCompact.startsWith(queryCompact)) return 96;
-  if (candidateWords.some((word) => word.startsWith(queryCompact))) return 91;
-  if (candidateCompact.includes(queryCompact)) return queryCompact.length === 1 ? 70 : 84;
-  if (candidateWords.some((word) => word.includes(queryCompact))) return queryCompact.length === 1 ? 68 : 80;
-
-  if (queryCompact.length < 3) return 0;
-
-  let best = 0;
-  const candidates = [candidateCompact, ...candidateWords];
-  const queryPieces = [queryCompact, ...queryWords.filter((word) => word.length >= 3)];
-
-  for (const piece of queryPieces) {
-    for (const candidate of candidates) {
-      if (candidate.length < 3) continue;
-      const distance = levenshteinDistance(piece, candidate);
-      const maxLength = Math.max(piece.length, candidate.length);
-      const similarity = 1 - distance / maxLength;
-      if (similarity >= 0.72) {
-        best = Math.max(best, Math.round(similarity * 76));
-      }
-    }
-  }
-
-  return best;
-}
-
-function scoreTarget(queryText: string, target: TargetRecord) {
-  const normalizedQuery = normalizeTargetName(queryText);
-  const compactQuery = compactSearchText(queryText);
-  const phoneQuery = normalizePhone(queryText);
-  const rawQuery = queryText.trim().toLowerCase();
-  const looksLikeLink = /https?:\/\//i.test(rawQuery) || rawQuery.includes(".") || rawQuery.includes("/");
-  const linkQuery = looksLikeLink ? normalizeUrl(queryText).toLowerCase() : "";
-  const canSearchLinks = looksLikeLink || compactQuery.length >= 3;
-  const terms = Array.isArray(target.searchTerms)
-    ? target.searchTerms.filter((term) => {
-        const value = String(term || "");
-        if (canSearchLinks) return true;
-        return !value.includes(".") && !/^https?:\/\//i.test(value);
-      })
-    : [];
-  const phones = getTargetPhones(target);
-  const links = getTargetLinks(target);
-
-  let score = 0;
-  score = Math.max(score, fuzzyScore(normalizedQuery, String(target.name || "")));
-  for (const alias of getTargetAliases(target)) {
-    score = Math.max(score, fuzzyScore(normalizedQuery, alias) - 2);
-  }
-  score = Math.max(score, fuzzyScore(normalizedQuery, String(target.type || "")) - 20);
-
-  for (const term of terms) {
-    score = Math.max(score, fuzzyScore(normalizedQuery, String(term)) - 4);
-  }
-
-  if (phoneQuery) {
-    for (const phone of phones) {
-      if (phone === phoneQuery) score = Math.max(score, 100);
-      else if (phone.includes(phoneQuery)) score = Math.max(score, phoneQuery.length <= 2 ? 68 : 88);
-    }
-  }
-
-  if (canSearchLinks && linkQuery) {
-    for (const link of links) {
-      const url = normalizeUrl(link.url).toLowerCase();
-      const host = hostFromUrl(url).toLowerCase();
-      if (url === linkQuery) score = Math.max(score, 100);
-      else if (url.includes(linkQuery) || (compactQuery.length >= 3 && host.includes(normalizedQuery))) score = Math.max(score, 86);
-    }
-  }
-
-  const categoryBoost = evaluateTargetCategoryTextMatch(queryText, target, fuzzyScore);
-  if (categoryBoost > 0) score = Math.max(score, categoryBoost);
-
-  return score;
-}
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -244,6 +127,8 @@ export default function SearchPage() {
 
 function TargetCard({ target }: { target: any }) {
   const { lang } = useLanguage();
+  const reportCount = Number(target.reportCount ?? 0);
+  const isHeavyReports = reportCount >= 15;
   const isNoData = target.status === "no_data";
   const isHighRisk = target.status === "high_risk";
   const isTrusted = target.status === "trusted";
@@ -266,10 +151,13 @@ function TargetCard({ target }: { target: any }) {
         : isWarning
           ? "border-l-orange-500"
           : "border-l-yellow-500";
+  const heavyBorder = isHeavyReports ? "ring-2 ring-destructive/35 dark:ring-destructive/45" : "";
 
   return (
     <Link href={getTargetHref(target)} className="block">
-      <div className={`glass-panel p-6 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-l-4 transition-all hover:scale-[1.01] ${borderClass}`}>
+      <div
+        className={`glass-panel p-6 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-l-4 transition-all hover:scale-[1.01] ${borderClass} ${heavyBorder}`}
+      >
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <h3 className="text-xl font-bold">{target.name}</h3>
@@ -277,6 +165,11 @@ function TargetCard({ target }: { target: any }) {
             <span className="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-black text-primary dark:text-neon-blue">
               {getTargetCategoryLabel(normalizeTargetCategory(target.category), lang)}
             </span>
+            {isHeavyReports ? (
+              <span className="inline-flex shrink-0 items-center rounded-full border border-destructive/25 bg-destructive/10 px-2.5 py-1 text-[11px] font-black text-destructive">
+                {lang === "ar" ? `بلاغات كثيرة (${reportCount})` : `Many reports (${reportCount})`}
+              </span>
+            ) : null}
           </div>
           <div className="flex gap-4 text-sm text-muted-foreground font-medium">
             {target.phone && (

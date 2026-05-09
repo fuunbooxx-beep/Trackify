@@ -258,6 +258,7 @@ export default function TargetDetailsPage() {
   const categoryLabel = getTargetCategoryLabel(categorySlug, lang);
   const targetReasons = getTargetReasons(target);
   const reportCount = Number(target.reportCount ?? 0);
+  const isHeavyReports = reportCount >= 15;
   const missingPhones = phones.length === 0;
   const missingLinks = links.length === 0;
   const isDealNotRecommended = reportCount >= 3;
@@ -973,6 +974,19 @@ export default function TargetDetailsPage() {
                   {statusIcon}
                   {getStatusLabel(target.status || "reviewing", lang)}
                 </div>
+
+                {isHeavyReports ? (
+                  <div className="rounded-3xl border border-destructive/25 bg-destructive/10 p-4 shadow-sm">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-destructive">
+                      {lang === "ar" ? "تحذير" : "Warning"}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-foreground">
+                      {lang === "ar"
+                        ? `على هذه الصفحة عدد كبير من البلاغات الموثقة (${reportCount}).`
+                        : `This page has a high number of verified reports (${reportCount}).`}
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="rounded-3xl border border-border/70 bg-background/70 p-4 shadow-sm dark:bg-slate-950/35 dark:border-slate-800/60">
                   <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">

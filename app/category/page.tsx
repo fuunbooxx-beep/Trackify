@@ -104,10 +104,6 @@ export default function CategoryPage() {
                   : "Browse categories and discover which targets belong to each one."}
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-black text-primary dark:text-neon-blue">
-              <Sparkles className="h-4 w-4" />
-              <span>{lang === "ar" ? "منظم للبحث السريع" : "Optimized for faster search"}</span>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

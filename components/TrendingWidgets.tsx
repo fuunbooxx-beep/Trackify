@@ -112,6 +112,8 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
   const links = getTargetLinks(target);
   const firstLink = links[0];
   const isDanger = tone === "danger";
+  const reportCount = Number(target.reportCount ?? 0);
+  const isHeavyReports = isDanger && reportCount >= 15;
   const accentText = isDanger ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400";
   const topLine = isDanger
     ? "from-red-500 via-orange-400 to-red-500"
@@ -119,7 +121,9 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
 
   return (
     <Link href={getTargetHref(target)} className="group block">
-      <article className="trend-card relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10 dark:border-border dark:bg-card/85 sm:p-3">
+      <article
+        className={`trend-card relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10 dark:border-border dark:bg-card/85 sm:p-3 ${isHeavyReports ? "ring-2 ring-red-500/25 dark:ring-red-500/35" : ""}`}
+      >
         <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${topLine}`} />
         <div className="flex items-start gap-2.5 sm:gap-3">
           <div className="relative shrink-0">
@@ -149,6 +153,11 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
                     {isDanger ? <AlertTriangle className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
                     {getStatusLabel(target.status || "reviewing", lang)}
                   </span>
+                  {isHeavyReports ? (
+                    <span className="inline-flex items-center rounded-full border border-red-500/25 bg-red-500/10 px-2.5 py-1 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                      {lang === "ar" ? `بلاغات كثيرة (${reportCount})` : `Many reports (${reportCount})`}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-500 transition group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary dark:border-border dark:text-muted-foreground dark:group-hover:text-neon-blue">
@@ -159,7 +168,7 @@ function TrendingCard({ target, rank, tone }: { target: TargetRecord; rank: numb
             <div className="mt-2.5 grid grid-cols-1 gap-2">
               <MiniStat
                 label={isDanger ? (lang === "ar" ? "البلاغات" : "Reports") : lang === "ar" ? "الثقة" : "Score"}
-                value={isDanger ? Number(target.reportCount || 0) : `${Number(target.trustScore || 0)}%`}
+                value={isDanger ? reportCount : `${Number(target.trustScore || 0)}%`}
                 tone={tone}
               />
             </div>

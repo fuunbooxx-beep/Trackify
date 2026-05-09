@@ -891,7 +891,12 @@ export default function DashboardPage() {
                 </Field>
 
                 <Field label={lang === "ar" ? "النوع / Badge" : "Type / badge"}>
-                  <input value={type} onChange={(e) => setType(e.target.value)} className="input" placeholder="page / seller / whatsapp" />
+                  <select value={type} onChange={(e) => setType(e.target.value)} className="input">
+                    <option value="page">{lang === "ar" ? "Page (صفحة)" : "Page"}</option>
+                    <option value="group">{lang === "ar" ? "Group (جروب)" : "Group"}</option>
+                    <option value="phone_number">{lang === "ar" ? "Phone number (رقم)" : "Phone number"}</option>
+                    <option value="telegram_channel">{lang === "ar" ? "Telegram Channel (قناة تيليجرام)" : "Telegram Channel"}</option>
+                  </select>
                 </Field>
 
                 <Field label={lang === "ar" ? "تصنيف الصفحة" : "Page category"}>

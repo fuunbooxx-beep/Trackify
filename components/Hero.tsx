@@ -1,13 +1,18 @@
 "use client";
 
-import { collection, getDocs, limit, query as firestoreQuery } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { Search, ShieldAlert } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { db } from "@/lib/firebase";
 import { useLanguage } from "@/lib/i18n/context";
+import { scoreTarget } from "@/lib/target-search-score";
 import type { TargetRecord } from "@/lib/target-utils";
+
+type CatalogTarget = TargetRecord & { id: string };
+
+const SUGGESTION_LIMIT = 10;
 
 type PopularSearch = {
   label: string;
@@ -16,11 +21,15 @@ type PopularSearch = {
 
 export function Hero() {
   const [query, setQuery] = useState("");
-  const [popularSearches, setPopularSearches] = useState<PopularSearch[]>([]);
+  const [catalogTargets, setCatalogTargets] = useState<CatalogTarget[]>([]);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [isMobile, setIsMobile] = useState(false);
+  const listId = useRef(`hero-search-suggestions-${Math.random().toString(36).slice(2, 9)}`);
   const router = useRouter();
   const { lang } = useLanguage();
   const prefersReducedMotion = useReducedMotion();
+  const deferredQuery = useDeferredValue(query);
 
   const fallbackSearches: PopularSearch[] =
     lang === "ar"
@@ -49,35 +58,60 @@ export function Hero() {
   useEffect(() => {
     let alive = true;
 
-    const fetchPopularSearches = async () => {
+    const fetchCatalog = async () => {
       try {
-        const snapshot = await getDocs(firestoreQuery(collection(db, "targets"), limit(100)));
-        const ranked = snapshot.docs
-          .map((item) => ({ id: item.id, ...item.data() } as TargetRecord))
-          .filter((target) => String(target.name || "").trim())
-          .sort((a, b) => {
-            const reportsDifference = Number(b.reportCount || 0) - Number(a.reportCount || 0);
-            if (reportsDifference !== 0) return reportsDifference;
-            return Number(b.trustScore || 0) - Number(a.trustScore || 0);
-          })
-          .slice(0, 3)
-          .map((target) => ({
-            label: String(target.name || ""),
-            query: String(target.name || ""),
-          }));
-
-        if (alive) setPopularSearches(ranked);
+        const snapshot = await getDocs(collection(db, "targets"));
+        if (!alive) return;
+        const rows = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as CatalogTarget));
+        setCatalogTargets(rows);
       } catch (error) {
         console.error(error);
       }
     };
 
-    void fetchPopularSearches();
+    void fetchCatalog();
 
     return () => {
       alive = false;
     };
   }, []);
+
+  const suggestions = useMemo(() => {
+    const q = deferredQuery.trim();
+    if (!q || !catalogTargets.length) return [];
+
+    return catalogTargets
+      .map((target) => ({ target, searchScore: scoreTarget(q, target) }))
+      .filter((row) => row.searchScore > 0)
+      .sort((a, b) => {
+        if (b.searchScore !== a.searchScore) return b.searchScore - a.searchScore;
+        const reportsDifference = Number(b.target.reportCount || 0) - Number(a.target.reportCount || 0);
+        if (reportsDifference !== 0) return reportsDifference;
+        return String(a.target.name || "").localeCompare(String(b.target.name || ""));
+      })
+      .slice(0, SUGGESTION_LIMIT)
+      .map((row) => row.target);
+  }, [deferredQuery, catalogTargets]);
+
+  useEffect(() => {
+    setActiveSuggestion(-1);
+  }, [deferredQuery]);
+
+  const popularSearches = useMemo((): PopularSearch[] => {
+    if (!catalogTargets.length) return [];
+    return catalogTargets
+      .filter((target) => String(target.name || "").trim())
+      .sort((a, b) => {
+        const reportsDifference = Number(b.reportCount || 0) - Number(a.reportCount || 0);
+        if (reportsDifference !== 0) return reportsDifference;
+        return Number(b.trustScore || 0) - Number(a.trustScore || 0);
+      })
+      .slice(0, 3)
+      .map((target) => ({
+        label: String(target.name || ""),
+        query: String(target.name || ""),
+      }));
+  }, [catalogTargets]);
 
   useEffect(() => {
     const mobileQuery = window.matchMedia("(max-width: 768px)");
@@ -90,7 +124,33 @@ export function Hero() {
     };
   }, []);
 
-  const visibleSearches = popularSearches.length ? popularSearches : fallbackSearches;
+  const visibleSearches = popularSearches.length > 0 ? popularSearches : fallbackSearches;
+  const showSuggestionPanel = inputFocused && query.trim().length > 0 && suggestions.length > 0;
+
+  const pickSuggestion = (value: string) => {
+    setQuery(value);
+    setInputFocused(false);
+    setActiveSuggestion(-1);
+    goToSearch(value);
+  };
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestions.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSuggestion((i) => Math.min(i + 1, suggestions.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSuggestion((i) => Math.max(i - 1, -1));
+    } else if (event.key === "Escape") {
+      setInputFocused(false);
+      setActiveSuggestion(-1);
+    } else if (event.key === "Enter" && activeSuggestion >= 0 && suggestions[activeSuggestion]) {
+      event.preventDefault();
+      pickSuggestion(String(suggestions[activeSuggestion].name || ""));
+    }
+  };
   const tickerMessages =
     lang === "ar"
       ? [
@@ -204,20 +264,62 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.34, ease: "easeOut" }}
           >
             <div className="search-aura absolute -inset-1 bg-gradient-to-r from-primary via-sky-400 to-blue-500 dark:from-neon-blue dark:via-blue-500 dark:to-neon-purple rounded-full blur opacity-30 group-hover:opacity-55 transition duration-500" />
-            <div className="relative flex items-center bg-card/95 rounded-full p-2 border border-primary/15 shadow-[0_18px_45px_rgba(37,99,235,0.16)] backdrop-blur dark:border-border dark:shadow-xl">
-              <input
-                type="text"
-                placeholder={lang === "ar" ? "رقم الفون مثلا: 01000000000 أو لينك الصفحة..." : "Example: 01000000000 or page URL..."}
-                className="min-w-0 flex-1 bg-transparent px-4 text-sm text-foreground outline-none placeholder:text-muted-foreground rtl:text-right sm:px-6 sm:text-base"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-              <button
-                type="submit"
-                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary text-white transition-transform hover:scale-105 dark:bg-neon-blue dark:text-black sm:h-12 sm:w-12"
-              >
-                <Search className="w-5 h-5 ltr-icon" />
-              </button>
+            <div className="relative">
+              <div className="relative flex items-center bg-card/95 rounded-full p-2 border border-primary/15 shadow-[0_18px_45px_rgba(37,99,235,0.16)] backdrop-blur dark:border-border dark:shadow-xl">
+                <input
+                  type="text"
+                  role="combobox"
+                  aria-expanded={showSuggestionPanel}
+                  aria-controls={listId.current}
+                  aria-autocomplete="list"
+                  autoComplete="off"
+                  placeholder={lang === "ar" ? "رقم الفون مثلا: 01000000000 أو لينك الصفحة..." : "Example: 01000000000 or page URL..."}
+                  className="min-w-0 flex-1 bg-transparent px-4 text-sm text-foreground outline-none placeholder:text-muted-foreground rtl:text-right sm:px-6 sm:text-base"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setInputFocused(false), 120);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                />
+                <button
+                  type="submit"
+                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary text-white transition-transform hover:scale-105 dark:bg-neon-blue dark:text-black sm:h-12 sm:w-12"
+                >
+                  <Search className="w-5 h-5 ltr-icon" />
+                </button>
+              </div>
+
+              {showSuggestionPanel ? (
+                <div
+                  id={listId.current}
+                  role="listbox"
+                  dir={lang === "ar" ? "rtl" : "ltr"}
+                  className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(18rem,50vh)] overflow-y-auto rounded-2xl border border-border/80 bg-popover/95 py-1 text-start shadow-xl backdrop-blur-md"
+                >
+                  {suggestions.map((target, index) => {
+                    const name = String(target.name || "");
+                    const active = index === activeSuggestion;
+                    return (
+                      <button
+                        key={target.id}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        className={`flex w-full cursor-pointer px-4 py-2.5 text-left text-sm font-semibold transition-colors rtl:text-right ${
+                          active ? "bg-primary/15 text-foreground" : "text-foreground hover:bg-muted/80"
+                        }`}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onMouseEnter={() => setActiveSuggestion(index)}
+                        onClick={() => pickSuggestion(name)}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           </motion.form>
 
