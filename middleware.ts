@@ -18,10 +18,27 @@ const RESERVED_ROOT_ROUTES = new Set([
 
 function resolveTargetRewrite(pathname: string) {
   const clean = pathname.replace(/^\/+|\/+$/g, "");
-  if (!clean || clean.includes("/")) return null;
-  if (RESERVED_ROOT_ROUTES.has(clean.toLowerCase())) return null;
+  if (!clean) return null;
   if (clean.includes(".")) return null;
-  return `/target/${clean}`;
+
+  const parts = clean.split("/").filter(Boolean);
+  if (!parts.length) return null;
+
+  // /<slug>
+  if (parts.length === 1) {
+    const slug = parts[0];
+    if (RESERVED_ROOT_ROUTES.has(slug.toLowerCase())) return null;
+    return `/target/${slug}`;
+  }
+
+  // /<slug>/about -> /target/<slug>/about
+  if (parts.length === 2 && parts[1].toLowerCase() === "about") {
+    const slug = parts[0];
+    if (RESERVED_ROOT_ROUTES.has(slug.toLowerCase())) return null;
+    return `/target/${slug}/about`;
+  }
+
+  return null;
 }
 
 export async function middleware(request: NextRequest) {

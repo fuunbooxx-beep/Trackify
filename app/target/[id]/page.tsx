@@ -754,13 +754,6 @@ export default function TargetDetailsPage() {
                       {target.type || "page"}
                     </span>
                     <Link
-                      href={`/target/${encodeURIComponent(activeTargetId)}/about`}
-                      className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-black text-foreground transition hover:bg-secondary/60"
-                    >
-                      <BadgeInfo className="h-4 w-4" />
-                      <span>{lang === "ar" ? "عن الصفحة" : "About"}</span>
-                    </Link>
-                    <Link
                       href={`/category#${categorySlug}`}
                       className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-black text-primary transition hover:bg-primary/15 dark:border-neon-blue/30 dark:bg-neon-blue/10 dark:text-neon-blue"
                     >
@@ -778,6 +771,16 @@ export default function TargetDetailsPage() {
                   <h1 className="mb-3 text-2xl font-black tracking-normal break-words md:text-4xl lg:text-5xl">
                     {target.name}
                   </h1>
+
+                  <div className="mb-4 flex items-center justify-center sm:justify-start">
+                    <Link
+                      href={`${getTargetHref({ id: activeTargetId, name: target.name })}/about`}
+                      className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-4 py-2 text-xs font-black text-foreground transition hover:bg-secondary/60"
+                    >
+                      <BadgeInfo className="h-4 w-4" />
+                      <span>{lang === "ar" ? `عن ${target.name}` : `ABOUT ${target.name}`}</span>
+                    </Link>
+                  </div>
 
                   {aliases.length > 0 && (
                     <div className="mb-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
