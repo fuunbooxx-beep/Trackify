@@ -423,6 +423,137 @@ html.dark.is-page-loading body::after {
   }
 }
 
+/* ───── Info Cards ───── */
+.info-card {
+  background: var(--card);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.07);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.dark .info-card {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(16px);
+  border-color: rgba(148, 163, 184, 0.12);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Blue variant */
+.info-card--blue:hover {
+  box-shadow: 0 16px 60px rgba(37, 99, 235, 0.15);
+  border-color: rgba(37, 99, 235, 0.25);
+}
+.dark .info-card--blue:hover {
+  box-shadow: 0 16px 60px rgba(250, 204, 21, 0.12);
+  border-color: rgba(250, 204, 21, 0.25);
+}
+
+/* Red variant */
+.info-card--red:hover {
+  box-shadow: 0 16px 60px rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+.dark .info-card--red:hover {
+  box-shadow: 0 16px 60px rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+/* Glow blobs */
+.info-card__blob {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  opacity: 0.18;
+  transition: opacity 0.4s ease;
+  background: rgba(37, 99, 235, 0.55);
+}
+.dark .info-card__blob {
+  opacity: 0.22;
+  background: rgba(250, 204, 21, 0.45);
+}
+.info-card__blob--red {
+  background: rgba(239, 68, 68, 0.55);
+}
+.dark .info-card__blob--red {
+  background: rgba(239, 68, 68, 0.5);
+}
+.info-card__blob--tr {
+  top: -80px;
+  right: -80px;
+}
+.info-card__blob--tl {
+  top: -80px;
+  left: -80px;
+}
+.info-card:hover .info-card__blob {
+  opacity: 0.3;
+}
+
+/* Accent top bar */
+.info-card__accent-bar {
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.7), transparent);
+  opacity: 0.7;
+}
+.dark .info-card__accent-bar {
+  background: linear-gradient(90deg, transparent, rgba(250, 204, 21, 0.8), transparent);
+}
+.info-card__accent-bar--red {
+  background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.7), transparent);
+}
+.dark .info-card__accent-bar--red {
+  background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.8), transparent);
+}
+
+/* Badge */
+.info-card__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.875rem;
+  font-size: 1.125rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+.info-card__badge--blue {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+.dark .info-card__badge--blue {
+  background: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+  border-color: rgba(250, 204, 21, 0.3);
+}
+.info-card__badge--red {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.dark .info-card__badge--red {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Divider line next to badge */
+.info-card__divider {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.3), transparent);
+}
+
+/* ───── Brand Logo ───── */
 .brand-logo {
   filter: drop-shadow(0 2px 10px rgba(15, 23, 42, 0.12));
 }

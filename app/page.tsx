@@ -75,36 +75,36 @@ export default function Home() {
         <Hero />
         
         {/* Quick Stats Section */}
-        <section className="relative overflow-hidden border-y border-border/50 bg-secondary/30 py-10 sm:py-16">
+        <section className="relative overflow-hidden border-y border-border/50 bg-secondary/30 py-12 sm:py-20">
           <div className="section-sheen absolute inset-0 opacity-50" />
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <motion.div
-              className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-3 md:gap-8"
+              className="grid grid-cols-1 gap-5 sm:gap-7 md:grid-cols-3 md:gap-10"
               initial="hidden"
               whileInView="show"
               viewport={{ once: true, margin: "-80px" }}
               variants={{
                 hidden: {},
-                show: { transition: { staggerChildren: 0.12 } },
+                show: { transition: { staggerChildren: 0.14 } },
               }}
             >
               <StatCard 
-                icon={<ShieldCheck className="h-10 w-10 text-green-500 sm:h-12 sm:w-12" />}
+                icon={<ShieldCheck className="h-10 w-10 sm:h-12 sm:w-12" />}
                 number={formattedStats.trustedSellers}
-                label={lang === "ar" ? "بائع موثوق" : "Trusted seller"}
-                glowClass="glow-secure"
+                label={lang === "ar" ? "بائع موثوق" : "Trusted Sellers"}
+                accent="green"
               />
               <StatCard 
-                icon={<AlertTriangle className="h-10 w-10 text-red-500 sm:h-12 sm:w-12" />}
+                icon={<AlertTriangle className="h-10 w-10 sm:h-12 sm:w-12" />}
                 number={formattedStats.scammersDetected}
-                label={lang === "ar" ? "نصاب تم كشفه" : "Scammer detected"}
-                glowClass="glow-warning"
+                label={lang === "ar" ? "نصاب تم كشفه" : "Scammers Detected"}
+                accent="red"
               />
               <StatCard 
-                icon={<Users className="h-10 w-10 text-primary dark:text-neon-blue sm:h-12 sm:w-12" />}
+                icon={<Users className="h-10 w-10 sm:h-12 sm:w-12" />}
                 number={formattedStats.activeUsers}
-                label={lang === "ar" ? "مستخدم نشط" : "Active users"}
-                glowClass="dark:glow-neon shadow-[0_0_15px_rgba(37,99,235,0.2)]"
+                label={lang === "ar" ? "مستخدم نشط" : "Active Users"}
+                accent="yellow"
               />
             </motion.div>
           </div>
@@ -132,27 +132,35 @@ export default function Home() {
           </motion.div>
 
           <motion.div
-            className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-8"
+            className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8"
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, margin: "-80px" }}
             variants={{
               hidden: {},
-              show: { transition: { staggerChildren: 0.16 } },
+              show: { transition: { staggerChildren: 0.18 } },
             }}
           >
+            {/* Card 1 - Quick Check */}
             <motion.div
-              className="glass-panel lively-card group relative overflow-hidden rounded-2xl p-5 transition-colors hover:border-primary/50 dark:hover:border-neon-blue/50 sm:p-7 md:p-8"
+              className="info-card info-card--blue group relative overflow-hidden rounded-3xl p-6 sm:p-8 md:p-9"
               variants={{
-                hidden: { opacity: 0, y: 28 },
-                show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: "easeOut" } },
+                hidden: { opacity: 0, y: 32 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
               }}
-              whileHover={{ y: -8 }}
+              whileHover={{ y: -6, scale: 1.015 }}
             >
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 dark:bg-neon-blue/10 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-125" />
-              <h3 className="mb-3 flex items-center gap-3 text-xl font-bold sm:text-2xl md:mb-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-lg font-black text-white shadow-lg dark:bg-neon-blue dark:text-black sm:h-10 sm:w-10 sm:text-xl">1</span>
-                <span>{lang === "ar" ? "بحث سريع قبل الشراء" : "Quick check before buying"}</span>
+              {/* bg glow blob */}
+              <div className="info-card__blob info-card__blob--tr" />
+              {/* accent top bar */}
+              <div className="info-card__accent-bar" />
+              {/* number badge */}
+              <div className="mb-5 flex items-center gap-4">
+                <span className="info-card__badge info-card__badge--blue">1</span>
+                <div className="info-card__divider" />
+              </div>
+              <h3 className="mb-3 text-xl font-extrabold tracking-tight sm:text-2xl md:mb-4">
+                {lang === "ar" ? "بحث سريع قبل الشراء" : "Quick Check Before Buying"}
               </h3>
               <p className="text-base font-medium leading-7 text-muted-foreground sm:text-lg">
                 {lang === "ar"
@@ -161,18 +169,23 @@ export default function Home() {
               </p>
             </motion.div>
 
+            {/* Card 2 - Submit Report */}
             <motion.div
-              className="glass-panel lively-card group relative overflow-hidden rounded-2xl p-5 transition-colors hover:border-destructive/50 sm:p-7 md:p-8"
+              className="info-card info-card--red group relative overflow-hidden rounded-3xl p-6 sm:p-8 md:p-9"
               variants={{
-                hidden: { opacity: 0, y: 28 },
-                show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: "easeOut" } },
+                hidden: { opacity: 0, y: 32 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
               }}
-              whileHover={{ y: -8 }}
+              whileHover={{ y: -6, scale: 1.015 }}
             >
-              <div className="absolute top-0 left-0 w-32 h-32 bg-destructive/10 rounded-br-full -ml-16 -mt-16 transition-transform group-hover:scale-125" />
-              <h3 className="mb-3 flex items-center gap-3 text-xl font-bold sm:text-2xl md:mb-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-destructive text-lg font-black text-white shadow-lg sm:h-10 sm:w-10 sm:text-xl">2</span>
-                <span>{lang === "ar" ? "تقديم بلاغات موثقة" : "Submit verified reports"}</span>
+              <div className="info-card__blob info-card__blob--tl info-card__blob--red" />
+              <div className="info-card__accent-bar info-card__accent-bar--red" />
+              <div className="mb-5 flex items-center gap-4">
+                <span className="info-card__badge info-card__badge--red">2</span>
+                <div className="info-card__divider" />
+              </div>
+              <h3 className="mb-3 text-xl font-extrabold tracking-tight sm:text-2xl md:mb-4">
+                {lang === "ar" ? "تقديم بلاغات موثقة" : "Submit Verified Reports"}
               </h3>
               <p className="text-base font-medium leading-7 text-muted-foreground sm:text-lg">
                 {lang === "ar"
@@ -188,19 +201,56 @@ export default function Home() {
   );
 }
 
-function StatCard({ icon, number, label, glowClass }: { icon: React.ReactNode, number: string, label: string, glowClass: string }) {
+const accentMap = {
+  green: {
+    iconBg: "bg-green-500/15 dark:bg-green-500/20",
+    iconColor: "text-green-500",
+    glow: "shadow-[0_0_30px_rgba(34,197,94,0.18)] dark:shadow-[0_0_30px_rgba(34,197,94,0.25)]",
+    border: "border-green-500/20 dark:border-green-500/30",
+    bar: "bg-gradient-to-r from-green-500/0 via-green-500 to-green-500/0",
+    numColor: "text-green-600 dark:text-green-400",
+  },
+  red: {
+    iconBg: "bg-red-500/15 dark:bg-red-500/20",
+    iconColor: "text-red-500",
+    glow: "shadow-[0_0_30px_rgba(239,68,68,0.18)] dark:shadow-[0_0_30px_rgba(239,68,68,0.25)]",
+    border: "border-red-500/20 dark:border-red-500/30",
+    bar: "bg-gradient-to-r from-red-500/0 via-red-500 to-red-500/0",
+    numColor: "text-red-600 dark:text-red-400",
+  },
+  yellow: {
+    iconBg: "bg-primary/15 dark:bg-primary/20",
+    iconColor: "text-primary",
+    glow: "shadow-[0_0_30px_rgba(250,204,21,0.18)] dark:shadow-[0_0_30px_rgba(250,204,21,0.25)]",
+    border: "border-primary/20 dark:border-primary/30",
+    bar: "bg-gradient-to-r from-primary/0 via-primary to-primary/0",
+    numColor: "text-yellow-600 dark:text-primary",
+  },
+} as const;
+
+function StatCard({ icon, number, label, accent }: { icon: React.ReactNode; number: string; label: string; accent: keyof typeof accentMap }) {
+  const a = accentMap[accent];
   return (
     <motion.div
-      className={`glass-panel stat-card relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-border/50 p-5 text-center transition-transform hover:-translate-y-2 sm:p-8 ${glowClass}`}
+      className={`stat-card relative flex flex-col items-center justify-center overflow-hidden rounded-3xl border bg-card/70 backdrop-blur-md p-6 text-center sm:p-9 ${a.glow} ${a.border} transition-all duration-300`}
       variants={{
-        hidden: { opacity: 0, y: 24, scale: 0.96 },
-        show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.55, ease: "easeOut" } },
+        hidden: { opacity: 0, y: 28, scale: 0.95 },
+        show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.6, ease: "easeOut" } },
       }}
-      whileHover={{ y: -8, scale: 1.02 }}
+      whileHover={{ y: -8, scale: 1.03 }}
     >
-      <div className="mb-4 inline-block rounded-2xl bg-background p-3 shadow-sm sm:mb-6 sm:p-4">{icon}</div>
-      <div className="mb-2 font-inter text-4xl font-black tracking-normal sm:mb-3 sm:text-5xl">{number}</div>
-      <div className="text-base font-bold tracking-normal text-muted-foreground sm:text-lg">{label}</div>
+      {/* Top shimmer bar */}
+      <span className={`absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-2/3 rounded-full opacity-70 ${a.bar}`} />
+      {/* Icon */}
+      <div className={`mb-5 sm:mb-6 inline-flex items-center justify-center rounded-2xl p-4 sm:p-5 ${a.iconBg} ${a.iconColor}`}>
+        {icon}
+      </div>
+      {/* Number */}
+      <div className={`mb-2 font-inter text-4xl font-black tracking-tight sm:mb-3 sm:text-5xl ${a.numColor}`}>{number}</div>
+      {/* Label */}
+      <div className="text-sm font-semibold uppercase tracking-widest text-muted-foreground sm:text-base">{label}</div>
+      {/* Bottom shimmer bar */}
+      <span className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] w-1/3 rounded-full opacity-40 ${a.bar}`} />
     </motion.div>
   );
 }
