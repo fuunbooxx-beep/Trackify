@@ -9,8 +9,11 @@ import {
   AlertCircle,
   AlertTriangle,
   BadgeInfo,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Eye,
   Facebook,
   Globe2,
   Image as ImageIcon,
@@ -23,6 +26,7 @@ import {
   Star,
   Pencil,
   Phone,
+  ShieldAlert,
   ShieldCheck,
   ShieldQuestion,
   Store,
@@ -38,7 +42,9 @@ import Link from "next/link";
 import {
   extractTargetIdFromSlug,
   getTargetHref,
-  getTargetAliases,
+  getTargetKnownAliases,
+  getTargetLinkedIdentities,
+  getTargetPreviousNames,
   getTargetInstapays,
   getTargetLinks,
   getTargetPhones,
@@ -57,6 +63,14 @@ import { useLanguage } from "@/lib/i18n/context";
 import { getAdminAvatarUrl, getAvatarUrl } from "@/lib/avatar";
 import { classifyEvidenceTier, formatEvidenceTierLabel } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
+import {
+  BehaviorFlagStrip,
+  buildBehaviorSummary,
+  deriveReportStats,
+  EvidencePreviewGallery,
+  SafetyBeforePayCard,
+  TrustScoreRing,
+} from "@/components/TargetTrustProfileChrome";
 
 const INSTAPAY_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/2/20/InstaPay_Logo.png";
 
@@ -145,6 +159,7 @@ export default function TargetDetailsPage() {
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const [reportSort, setReportSort] = useState<ReportSortMode>("newest");
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title: string } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const adminCommentFileInputRef = useRef<HTMLInputElement>(null);
   const manualFileInputRef = useRef<HTMLInputElement>(null);
@@ -152,6 +167,7 @@ export default function TargetDetailsPage() {
   const activeTargetId = String(target?.id || targetId);
 
   const sortedReports = useMemo(() => sortReportsList(reports, reportSort), [reports, reportSort]);
+  const reportDerived = useMemo(() => deriveReportStats(reports), [reports]);
 
   const uploadImagesThroughApi = async (ownerKey: string, files: File[]) => {
     if (!files.length) return [] as string[];
@@ -265,6 +281,14 @@ export default function TargetDetailsPage() {
     };
   }, [target?.id, target?.name]);
 
+  const handleCopyPageLink = () => {
+    if (typeof window === "undefined") return;
+    void navigator.clipboard.writeText(window.location.href).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
   if (loading) {
     return (
       <>
@@ -294,7 +318,9 @@ export default function TargetDetailsPage() {
   const phones = getTargetPhones(target);
   const instapays = getTargetInstapays(target);
   const links = getTargetLinks(target);
-  const aliases = getTargetAliases(target);
+  const knownAliases = getTargetKnownAliases(target);
+  const previousNames = getTargetPreviousNames(target);
+  const linkedIdentities = getTargetLinkedIdentities(target);
   const categorySlug = normalizeTargetCategory(target.category);
   const categoryLabel = getTargetCategoryLabel(categorySlug, lang);
   const targetReasons = getTargetReasons(target);
@@ -303,6 +329,7 @@ export default function TargetDetailsPage() {
   const missingPhones = phones.length === 0;
   const missingLinks = links.length === 0;
   const isDealNotRecommended = reportCount >= 3;
+  const trustScoreValue = Number(target.trustScore ?? 0);
   const isNoData = target.status === "no_data";
   const isHighRisk = target.status === "high_risk";
   const isTrusted = target.status === "trusted";
@@ -316,15 +343,15 @@ export default function TargetDetailsPage() {
         : isWarning
           ? "text-orange-500"
           : "text-yellow-500";
-  const statusBg = isNoData
-    ? "bg-muted/40 border-border dark:bg-muted/20"
-    : isHighRisk
-      ? "bg-destructive/10 border-destructive/20 dark:bg-destructive/5 dark:border-destructive/25"
-      : isTrusted
-        ? "bg-green-500/10 border-green-500/20 dark:bg-green-500/5 dark:border-green-500/25"
-        : isWarning
-          ? "bg-orange-500/10 border-orange-500/20 dark:bg-orange-500/5 dark:border-orange-500/25"
-          : "bg-yellow-500/10 border-yellow-500/20 dark:bg-yellow-500/5 dark:border-yellow-500/25";
+  const statusBg = isNoData ? "bg-muted/40 border-border dark:bg-muted/20" : "bg-transparent dark:bg-transparent";
+  const statusPaneBorder = isNoData ? "border-border xl:border-l" : "border-transparent xl:border-l-0";
+  const statusPaneTone = isNoData
+    ? ""
+    : trustScoreValue < 40
+    ? "trackify-score-column--danger"
+    : trustScoreValue < 80
+      ? "trackify-score-column--warning"
+      : "trackify-score-column--trusted";
   const statusIcon = isNoData ? (
     <ShieldQuestion className="w-5 h-5" />
   ) : isHighRisk || isWarning ? (
@@ -777,19 +804,23 @@ export default function TargetDetailsPage() {
   return (
     <>
       <Navbar />
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-24 min-h-screen overflow-x-hidden text-slate-900 dark:text-slate-100">
+      <main className="mx-auto min-h-screen w-full max-w-6xl overflow-x-clip bg-gradient-to-b from-slate-50 to-white px-3 py-24 text-slate-900 dark:from-[#020308] dark:to-[#0a0f1c] dark:text-slate-100">
         <section
-          className={`glass-panel overflow-hidden rounded-[32px] border shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:shadow-[0_26px_90px_rgba(0,0,0,0.55)] ${
-            isNoData ? "border-t-border" : isHighRisk ? "border-t-destructive" : isTrusted ? "border-t-green-500" : "border-t-yellow-500"
+          className={`trackify-profile-page glass-panel relative max-w-full overflow-hidden rounded-[32px] border shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:shadow-[0_26px_90px_rgba(0,0,0,0.55)] ${
+            isNoData || isHighRisk ? "border-t-border" : isTrusted ? "border-t-green-500" : "border-t-yellow-500"
           }`}
         >
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="min-w-0 p-4 sm:p-5 md:p-8 xl:p-9">
-              <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
+          <div
+            className="pointer-events-none absolute inset-0 trackify-cyber-grid opacity-30 dark:opacity-[0.45]"
+            aria-hidden
+          />
+          <div className="relative z-10 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0 space-y-6 p-4 sm:p-5 md:p-8 xl:p-9">
+              <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
                 <LogoBlock logoUrl={target.logoUrl || ""} name={target.name || ""} />
 
-                <div className="min-w-0 flex-1 text-center sm:text-start">
-                  <div className="mb-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
+                <div className="min-w-0 flex-1 space-y-4 text-center sm:text-start">
+                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
                     <span className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/70 px-3 py-1 text-xs font-black uppercase tracking-wide">
                       <BadgeInfo className="w-4 h-4" />
                       {target.type || "page"}
@@ -801,6 +832,11 @@ export default function TargetDetailsPage() {
                       <Layers className="h-4 w-4 shrink-0" />
                       <span className="max-w-[220px] truncate">{categoryLabel}</span>
                     </Link>
+                    {categorySlug === "gaming" ? (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                        {lang === "ar" ? "سوق" : "Marketplace"}
+                      </span>
+                    ) : null}
                     {target.claimedByUserId && (
                       <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-black text-primary dark:text-neon-blue">
                         <ShieldCheck className="w-4 h-4" />
@@ -809,48 +845,179 @@ export default function TargetDetailsPage() {
                     )}
                   </div>
 
-                  <h1 className="mb-3 text-2xl font-black tracking-normal break-words md:text-4xl lg:text-5xl">
+                  <h1 className="text-2xl font-black tracking-tight break-words text-foreground md:text-4xl lg:text-[2.75rem] lg:leading-[1.1] dark:bg-gradient-to-br dark:from-white dark:to-slate-400 dark:bg-clip-text dark:text-transparent">
                     {target.name}
                   </h1>
 
-                  <div className="mb-4 flex items-center justify-center sm:justify-start">
+                  {knownAliases.length > 0 || previousNames.length > 0 || linkedIdentities.length > 0 ? (
+                    <div className="flex w-full flex-col gap-4 text-start">
+                      {knownAliases.length > 0 ? (
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                          <span className="font-black uppercase tracking-[0.14em] text-muted-foreground">
+                            {lang === "ar" ? "أسماء معروفة" : "Known aliases"}
+                          </span>
+                          <span className="text-muted-foreground">:</span>
+                          <span className="font-bold text-foreground/90">{knownAliases.join(" / ")}</span>
+                        </div>
+                      ) : null}
+                      {previousNames.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-muted-foreground">
+                            {lang === "ar" ? "أسماء سابقة" : "Previous names"}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {previousNames.map((tag) => (
+                              <span
+                                key={`pn-${tag}`}
+                                className="inline-flex max-w-full items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-sm font-bold text-foreground dark:border-amber-400/35 dark:bg-amber-500/10"
+                              >
+                                <span className="truncate">{tag}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {linkedIdentities.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-muted-foreground">
+                            {lang === "ar" ? "هويات مرتبطة" : "Linked identities"}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {linkedIdentities.map((tag) => (
+                              <span
+                                key={`li-${tag}`}
+                                className="inline-flex max-w-full items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-3.5 py-1.5 text-sm font-bold text-foreground dark:border-sky-400/35 dark:bg-sky-500/10"
+                              >
+                                <span className="truncate">{tag}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <p className="trackify-profile-wide-row glass-cyber-card mx-auto w-full max-w-full border-s-4 border-s-primary/55 px-4 py-3 text-sm leading-relaxed text-muted-foreground md:text-base sm:mx-0 xl:max-w-3xl dark:border-s-neon-blue/45">
+                    {buildBehaviorSummary(target, reportDerived, lang)}
+                  </p>
+
+                  <div className="trackify-profile-wide-row flex justify-center sm:justify-start">
                     <Link
                       href={`${getTargetHref({ id: activeTargetId, name: target.name })}/about`}
-                      className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-4 py-2 text-xs font-black text-foreground transition hover:bg-secondary/60"
+                      className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-primary/35 bg-primary/10 px-6 py-2.5 text-sm font-black text-primary transition duration-300 hover:-translate-y-0.5 hover:border-primary/55 hover:bg-primary/18 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] dark:border-neon-blue/40 dark:bg-neon-blue/10 dark:text-neon-blue dark:hover:shadow-[0_0_28px_rgba(250,204,21,0.12)]"
                     >
-                      <BadgeInfo className="h-4 w-4" />
-                      <span>{lang === "ar" ? `عن ${target.name}` : `ABOUT ${target.name}`}</span>
+                      <BadgeInfo className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
+                      <span className="leading-tight">{lang === "ar" ? `عن ${target.name}` : `About ${target.name}`}</span>
                     </Link>
                   </div>
 
-                  {aliases.length > 0 && (
-                    <div className="mb-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                      <span className="text-xs font-black uppercase tracking-wide text-muted-foreground">
-                        {lang === "ar" ? "\u0645\u0639\u0631\u0648\u0641\u0629 \u0623\u064a\u0636\u0627 \u0628\u0627\u0633\u0645" : "Also known as"}
+                  <div className="trackify-profile-wide-row glass-cyber-card w-full min-w-0 rounded-3xl border border-border p-4 text-start sm:p-5">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted-foreground">
+                        {lang === "ar" ? "بيانات التعريف" : "Identity details"}
+                      </h2>
+                      <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-black ${statusClass} bg-background`}>
+                        {statusIcon}
+                        {getStatusLabel(target.status || "reviewing", lang)}
                       </span>
-                      {aliases.map((alias) => (
-                        <span key={alias} className="inline-flex max-w-full items-center rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-black text-foreground">
-                          <span className="truncate">{alias}</span>
-                        </span>
-                      ))}
                     </div>
-                  )}
 
-                  <p className="mx-auto max-w-3xl text-sm leading-7 text-muted-foreground md:text-base sm:mx-0">
-                    {isNoData
-                      ? (lang === "ar"
-                          ? "لا توجد بيانات أو بلاغات موثقة كفاية لعرض تقييم واضح لهذه الصفحة حتى الآن."
-                          : "There is not enough verified data yet to show a meaningful trust profile for this page.")
-                      : (lang === "ar"
-                          ? "ملخص سريع لبيانات الصفحة والبلاغات الموثقة المرتبطة بها، مع مؤشرات الثقة وآخر النشاط."
-                          : "A quick summary of this page, its verified reports, and recent trust activity signals.")}
-                  </p>
+                    <div className="space-y-4">
+                      {(missingPhones || missingLinks) && (
+                        <div className="space-y-2">
+                          {missingLinks && (
+                            <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                              {lang === "ar"
+                                ? "⚠️ لم يتم العثور على رابط رسمي لهذه الصفحة."
+                                : "⚠️ No official page link was found for this target."}
+                            </p>
+                          )}
+                          {missingPhones && (
+                            <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                              {lang === "ar"
+                                ? "⚠️ لم يتم العثور على رقم هاتف موثوق لهذه الصفحة."
+                                : "⚠️ No verified phone number was found for this target."}
+                            </p>
+                          )}
+                          <p className="text-sm leading-7 text-amber-900/90 dark:text-amber-100/90">
+                            {lang === "ar"
+                              ? "البلاغات مرتبطة بالاسم والأدلة/الصور المتوفرة فقط حاليًا. عند توفير البيانات الناقصة (رقم أو رابط)، سيتم تحديث الصفحة فورًا."
+                              : "Reports are currently linked using the target name and available evidence/images only. Once missing data (phone or link) is provided, this page will be updated immediately."}
+                          </p>
+                        </div>
+                      )}
+
+                      {phones.length > 0 && (
+                        <InfoGroup title={lang === "ar" ? "أرقام الهاتف" : "Phone numbers"}>
+                          {phones.map((phone) => (
+                            <a
+                              key={phone}
+                              href={`tel:${phone}`}
+                              dir="ltr"
+                              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-bold text-muted-foreground transition hover:-translate-y-0.5 hover:text-foreground"
+                            >
+                              <Phone className="w-4 h-4" />
+                              {phone}
+                            </a>
+                          ))}
+                        </InfoGroup>
+                      )}
+
+                      {instapays.length > 0 && (
+                        <InfoGroup title={lang === "ar" ? "Instapay" : "Instapay"}>
+                          {instapays.map((handle) => (
+                            <span
+                              key={handle}
+                              dir="ltr"
+                              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-bold text-muted-foreground"
+                            >
+                              <img src={INSTAPAY_ICON_URL} alt="Instapay" className="h-5 w-5 object-contain brightness-0 invert" />
+                              {handle}
+                            </span>
+                          ))}
+                        </InfoGroup>
+                      )}
+
+                      {links.length > 0 && (
+                        <InfoGroup title={lang === "ar" ? "روابط الصفحات" : "Page links"}>
+                          {links.map((link) => (
+                            <a
+                              key={link.url}
+                              href={link.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-bold text-muted-foreground transition hover:-translate-y-0.5 hover:text-foreground"
+                            >
+                              <PlatformIcon platform={link.platform} className="w-4 h-4 shrink-0" />
+                              <span>{platformLabel(link.platform)}</span>
+                              <span dir="ltr" className="max-w-[220px] truncate text-xs font-medium">
+                                {hostFromUrl(link.url)}
+                              </span>
+                            </a>
+                          ))}
+                        </InfoGroup>
+                      )}
+
+                      {phones.length === 0 && instapays.length === 0 && links.length === 0 && (
+                        <div className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-center">
+                          <p className="text-sm font-bold text-muted-foreground">
+                            {lang === "ar"
+                              ? "لا توجد أرقام أو حسابات Instapay أو روابط مضافة لهذا الهدف بعد."
+                              : "No phone numbers, instapay handles, or links have been added for this target yet."}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
 
                   <div
-                    className={`mt-4 rounded-2xl border px-4 py-3 text-sm md:text-[15px] ${
+                    className={`glass-cyber-card rounded-2xl border px-4 py-3 text-sm md:text-[15px] ${
                       isDealNotRecommended
-                        ? "border-destructive/30 bg-destructive/10"
-                        : "border-border bg-secondary/35"
+                        ? "border-destructive/35 bg-destructive/10"
+                        : "border-border/70 bg-secondary/25"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -886,148 +1053,52 @@ export default function TargetDetailsPage() {
                     </div>
                   </div>
 
-                  {targetReasons.length > 0 && (
-                    <div className="mt-5 space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                          <AlertTriangle className="h-4 w-4" />
-                          {lang === "ar" ? "\u0623\u0633\u0628\u0627\u0628 \u0627\u0644\u062a\u062d\u0630\u064a\u0631" : "Warning reasons"}
-                        </span>
-                        <span className="text-xs font-semibold leading-5 text-muted-foreground">
-                          {lang === "ar"
-                            ? "\u0631\u0627\u062c\u0639 \u0647\u0630\u0647 \u0627\u0644\u0639\u0644\u0627\u0645\u0627\u062a \u0642\u0628\u0644 \u0623\u064a \u062a\u0639\u0627\u0645\u0644."
-                            : "Review these signals before dealing with this target."}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {targetReasons.map((reason) => (
-                          <span
-                            key={reason}
-                            title={getTargetReasonDescription(reason, lang)}
-                            className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-2 text-xs font-black text-foreground shadow-sm"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                            <span className="truncate">{getTargetReasonLabel(reason, lang)}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              <BehaviorFlagStrip
+                reasons={targetReasons}
+                reasonLabel={getTargetReasonLabel}
+                reasonTitle={getTargetReasonDescription}
+                lang={lang}
+              />
 
-                  <div className="mt-6 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)]">
-                    <div className="min-w-0 rounded-3xl border border-border bg-background/65 p-4 sm:p-5">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted-foreground">
-                          {lang === "ar" ? "بيانات التعريف" : "Identity details"}
-                        </h2>
-                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black ${statusClass} bg-background`}>
-                          {statusIcon}
-                          {getStatusLabel(target.status || "reviewing", lang)}
-                        </span>
-                      </div>
+              <EvidencePreviewGallery
+                urls={reportDerived.evidenceUrls}
+                extraCount={Math.max(0, reportDerived.evidenceUrls.length - 4)}
+                lang={lang}
+                onOpen={(index) =>
+                  setLightbox({
+                    images: reportDerived.evidenceUrls,
+                    index,
+                    title: lang === "ar" ? "أدلة الصفحة" : "Page evidence",
+                  })
+                }
+                onViewMore={() =>
+                  document.getElementById("community-reports")?.scrollIntoView({ behavior: "smooth" })
+                }
+              />
 
-                      <div className="space-y-4">
-                        {(missingPhones || missingLinks) && (
-                          <div className="space-y-2">
-                            {missingLinks && (
-                              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
-                                {lang === "ar"
-                                  ? "⚠️ لم يتم العثور على رابط رسمي لهذه الصفحة."
-                                  : "⚠️ No official page link was found for this target."}
-                              </p>
-                            )}
-                            {missingPhones && (
-                              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
-                                {lang === "ar"
-                                  ? "⚠️ لم يتم العثور على رقم هاتف موثوق لهذه الصفحة."
-                                  : "⚠️ No verified phone number was found for this target."}
-                              </p>
-                            )}
-                            <p className="text-sm leading-7 text-amber-900/90 dark:text-amber-100/90">
-                              {lang === "ar"
-                                ? "البلاغات مرتبطة بالاسم والأدلة/الصور المتوفرة فقط حاليًا. عند توفير البيانات الناقصة (رقم أو رابط)، سيتم تحديث الصفحة فورًا."
-                                : "Reports are currently linked using the target name and available evidence/images only. Once missing data (phone or link) is provided, this page will be updated immediately."}
-                            </p>
-                          </div>
-                        )}
-
-                        {phones.length > 0 && (
-                          <InfoGroup title={lang === "ar" ? "أرقام الهاتف" : "Phone numbers"}>
-                            {phones.map((phone) => (
-                              <a key={phone} href={`tel:${phone}`} dir="ltr" className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-bold text-muted-foreground transition hover:-translate-y-0.5 hover:text-foreground">
-                                <Phone className="w-4 h-4" />
-                                {phone}
-                              </a>
-                            ))}
-                          </InfoGroup>
-                        )}
-
-                        {instapays.length > 0 && (
-                          <InfoGroup title={lang === "ar" ? "Instapay" : "Instapay"}>
-                            {instapays.map((handle) => (
-                              <span key={handle} dir="ltr" className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-bold text-muted-foreground">
-                                <img src={INSTAPAY_ICON_URL} alt="Instapay" className="h-5 w-5 object-contain brightness-0 invert" />
-                                {handle}
-                              </span>
-                            ))}
-                          </InfoGroup>
-                        )}
-
-                        {links.length > 0 && (
-                          <InfoGroup title={lang === "ar" ? "روابط الصفحات" : "Page links"}>
-                            {links.map((link) => (
-                              <a key={link.url} href={link.url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-bold text-muted-foreground transition hover:-translate-y-0.5 hover:text-foreground">
-                                <PlatformIcon platform={link.platform} className="w-4 h-4 shrink-0" />
-                                <span>{platformLabel(link.platform)}</span>
-                                <span dir="ltr" className="truncate max-w-[220px] text-xs font-medium">
-                                  {hostFromUrl(link.url)}
-                                </span>
-                              </a>
-                            ))}
-                          </InfoGroup>
-                        )}
-
-                        {phones.length === 0 && instapays.length === 0 && links.length === 0 && (
-                          <div className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-center">
-                            <p className="text-sm font-bold text-muted-foreground">
-                              {lang === "ar" ? "لا توجد أرقام أو حسابات Instapay أو روابط مضافة لهذا الهدف بعد." : "No phone numbers, instapay handles, or links have been added for this target yet."}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3">
-                      <CompactStatCard
-                        label={lang === "ar" ? "البلاغات الموثقة" : "Verified reports"}
-                        value={Number(target.reportCount ?? 0)}
-                        tone="neutral"
-                      />
-                      <CompactStatCard
-                        label={lang === "ar" ? "نسبة النجاح" : "Success ratio"}
-                        value={isNoData ? "—" : successRatioPct != null ? `${successRatioPct}%` : "—"}
-                        tone="positive"
-                      />
-                      <CompactStatCard
-                        label={lang === "ar" ? "آخر بلاغ نصب" : "Last scam report"}
-                        value={isNoData ? "—" : lastScamLabel}
-                        tone="danger"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <SafetyBeforePayCard lang={lang} />
             </div>
 
-            <aside className={`border-t border-border p-4 md:p-6 xl:border-t-0 xl:border-r ${statusBg}`}>
+            <aside
+              className={`trackify-score-column ${statusPaneTone} relative z-10 overflow-x-hidden border-t p-4 md:p-6 xl:sticky xl:top-24 xl:min-h-full xl:self-stretch xl:border-r-0 xl:border-t-0 ${statusPaneBorder} ${statusBg}`}
+            >
               <div className="flex h-full flex-col gap-4">
-                <div className={`inline-flex w-fit items-center gap-2 rounded-full bg-background/80 px-3 py-1.5 text-xs md:text-sm font-black shadow-sm ${statusClass}`}>
-                  {statusIcon}
-                  {getStatusLabel(target.status || "reviewing", lang)}
-                </div>
+                <TrustScoreRing score={Number(target.trustScore ?? 0)} isNoData={isNoData} lang={lang} />
+
+                {!isNoData ? (
+                  <div className="glass-cyber-card flex flex-wrap items-center gap-2 rounded-2xl p-4">
+                    <StarRating
+                      value={toStarRating(Number(target.trustScore ?? 50))}
+                      label={lang === "ar" ? "تقييم بالنجوم" : "Star rating"}
+                    />
+                    <span className="text-xs font-bold text-muted-foreground">
+                      {formatStarLabel(toStarRating(Number(target.trustScore ?? 50)))} / 5
+                    </span>
+                  </div>
+                ) : null}
 
                 {isHeavyReports ? (
-                  <div className="rounded-3xl border border-destructive/25 bg-destructive/10 p-4 shadow-sm">
+                  <div className="glass-cyber-card rounded-2xl border border-destructive/30 bg-destructive/10 p-4">
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-destructive">
                       {lang === "ar" ? "تحذير" : "Warning"}
                     </p>
@@ -1039,39 +1110,15 @@ export default function TargetDetailsPage() {
                   </div>
                 ) : null}
 
-                <div className="rounded-3xl border border-border/70 bg-background/70 p-4 shadow-sm dark:bg-slate-950/35 dark:border-slate-800/60">
-                  <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    {lang === "ar" ? "مستوى الأمان" : "Trust Score"}
-                  </p>
-                  {isNoData ? (
-                    <p className={`mt-2 text-2xl md:text-3xl font-black tracking-normal ${statusClass}`}>
-                      {lang === "ar" ? "لا بيانات" : "No data"}
-                    </p>
-                  ) : (
-                    <p className={`mt-2 text-4xl md:text-5xl xl:text-6xl font-black tracking-normal ${statusClass}`}>
-                      {Number(target.trustScore ?? 0)}%
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <StarRating
-                      value={toStarRating(Number(target.trustScore ?? 50))}
-                      label={lang === "ar" ? "تقييم بالنجوم" : "Star rating"}
-                    />
-                    {!isNoData && (
-                      <span className="text-xs font-bold text-muted-foreground">
-                        {formatStarLabel(toStarRating(Number(target.trustScore ?? 50)))} / 5
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {lang === "ar"
-                      ? "التقييم الحالي محسوب من البلاغات الموثقة، قوة الأدلة، وحداثة النشاط."
-                      : "This score is based on verified reports, evidence quality, and recency."}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 md:gap-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label={lang === "ar" ? "تجارب ناجحة" : "Successful reports"} value={reportDerived.successCount} />
+                  <Metric label={lang === "ar" ? "بلاغات نصب" : "Scam reports"} value={reportDerived.scamCount} />
+                  <Metric label={lang === "ar" ? "لقطات أدلة" : "Evidence shots"} value={reportDerived.evidenceImageCount} />
                   <Metric label={lang === "ar" ? "بلاغات موثقة" : "Verified reports"} value={Number(target.reportCount ?? 0)} />
+                  <Metric
+                    label={lang === "ar" ? "آخر نشاط" : "Last activity"}
+                    value={reportDerived.lastActivityAt ? formatRelativeDate(reportDerived.lastActivityAt, lang) : "—"}
+                  />
                   <Metric
                     label={lang === "ar" ? "نسبة النجاح" : "Success ratio"}
                     value={isNoData ? "—" : successRatioPct != null ? `${successRatioPct}%` : "—"}
@@ -1080,18 +1127,41 @@ export default function TargetDetailsPage() {
                     label={lang === "ar" ? "آخر بلاغ نصب" : "Last scam report"}
                     value={isNoData ? "—" : lastScamLabel}
                   />
-                  <Metric
-                    label={lang === "ar" ? "آخر نجاح" : "Last success"}
-                    value={isNoData ? "—" : lastSuccessLabel}
-                  />
                   <Metric label={lang === "ar" ? "روابط" : "Links"} value={links.length} />
                   <Metric label={lang === "ar" ? "أرقام" : "Phones"} value={phones.length} />
-                  <Metric label={lang === "ar" ? "تحديث" : "Updated"} value={target.updatedAt ? new Date(target.updatedAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US") : "-"} />
+                </div>
+
+                <div className="grid gap-2 pt-2">
+                  <SidebarActionLink href="#community-reports" tone="neutral">
+                    <Eye className="h-4 w-4 shrink-0" />
+                    {lang === "ar" ? "عرض البلاغات" : "View reports"}
+                  </SidebarActionLink>
+                  <SidebarActionLink
+                    href={`/report?target=${encodeURIComponent(target.name || "")}&link=${encodeURIComponent(links[0]?.url || "")}&lock=1`}
+                    tone="danger"
+                  >
+                    <ShieldAlert className="h-4 w-4 shrink-0" />
+                    {lang === "ar" ? "بلّغ عن نصب" : "Report scam"}
+                  </SidebarActionLink>
+                  <SidebarActionLink
+                    href={`/report?target=${encodeURIComponent(target.name || "")}&link=${encodeURIComponent(links[0]?.url || "")}&lock=1`}
+                    tone="primary"
+                  >
+                    <MessageCircle className="h-4 w-4 shrink-0" />
+                    {lang === "ar" ? "شارك تجربتك" : "Share experience"}
+                  </SidebarActionLink>
+                  <SidebarActionButton onClick={handleCopyPageLink} tone="neutral">
+                    {linkCopied ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : <Copy className="h-4 w-4 shrink-0" />}
+                    {linkCopied ? (lang === "ar" ? "تم النسخ" : "Copied") : lang === "ar" ? "نسخ الرابط" : "Copy page link"}
+                  </SidebarActionButton>
                 </div>
 
                 <div className="mt-auto grid gap-2">
                   {isAdmin && (
-                    <Link href={`/dashboard?edit=${target.id}`} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-black text-primary-foreground transition hover:-translate-y-0.5 hover:bg-primary/90 dark:bg-neon-blue dark:text-black">
+                    <Link
+                      href={`/dashboard?edit=${target.id}`}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-black text-primary-foreground transition duration-300 hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_0_24px_rgba(250,204,21,0.2)] dark:bg-neon-blue dark:text-black"
+                    >
                       <Pencil className="w-4 h-4" />
                       {lang === "ar" ? "تعديل البيانات" : "Edit target"}
                     </Link>
@@ -1100,7 +1170,7 @@ export default function TargetDetailsPage() {
                     <button
                       type="button"
                       onClick={() => setShowManualReportForm((prev) => !prev)}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background/80 px-4 py-3 text-sm font-black transition hover:-translate-y-0.5 hover:bg-background"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border/80 bg-background/80 px-4 py-3 text-sm font-black transition duration-300 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-background"
                     >
                       <MessageCircle className="w-4 h-4" />
                       {showManualReportForm
@@ -1112,20 +1182,13 @@ export default function TargetDetailsPage() {
                           : "Add manual report"}
                     </button>
                   )}
-                  <Link
-                    href={`/report?target=${encodeURIComponent(target.name || "")}&link=${encodeURIComponent(links[0]?.url || "")}&lock=1`}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-background/80 px-4 py-3 text-sm font-black transition hover:-translate-y-0.5 hover:bg-background"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    {lang === "ar" ? "أضف تجربتك" : "Share your experience"}
-                  </Link>
                 </div>
               </div>
             </aside>
           </div>
         </section>
 
-        <section className="mt-10">
+        <section id="community-reports" className="mt-10 scroll-mt-28">
           <div className="mb-6 flex flex-col gap-3 rounded-3xl border border-border bg-background/60 px-5 py-4 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between md:px-6">
             <h2 className="text-2xl font-black tracking-tight md:text-3xl flex items-center gap-3">
               <MessageCircle className="w-6 h-6 text-primary dark:text-neon-blue" />
@@ -1801,12 +1864,18 @@ function EvidenceLightbox({
 function LogoBlock({ logoUrl, name }: { logoUrl: string; name: string }) {
   return (
     <div className="shrink-0 self-center sm:self-start lg:self-auto">
-      <div className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 rounded-2xl sm:rounded-3xl border border-border bg-background overflow-hidden flex items-center justify-center shadow-sm">
-        {logoUrl ? (
-          <img src={logoUrl} alt={name} className="h-full w-full object-cover" />
-        ) : (
-          <Store className="w-9 h-9 sm:w-11 sm:h-11 text-muted-foreground" />
-        )}
+      <div className="relative">
+        <div
+          className="absolute -inset-1 rounded-[1.25rem] bg-gradient-to-br from-primary/25 via-transparent to-amber-500/20 opacity-80 blur-md dark:from-neon-blue/35 dark:to-amber-500/25"
+          aria-hidden
+        />
+        <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border border-primary/20 bg-background/90 shadow-[0_0_40px_rgba(250,204,21,0.12)] backdrop-blur-sm dark:border-neon-blue/25 sm:h-28 sm:w-28 md:h-32 md:w-32 md:rounded-3xl">
+          {logoUrl ? (
+            <img src={logoUrl} alt={name} className="h-full w-full object-cover" />
+          ) : (
+            <Store className="h-10 w-10 text-muted-foreground sm:h-11 sm:w-11 md:h-12 md:w-12" />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1823,34 +1892,50 @@ function InfoGroup({ title, children }: { title: string; children: React.ReactNo
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-background/70 p-3">
-      <p className="text-xs font-bold text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-black">{value}</p>
+    <div className="glass-cyber-card min-h-[82px] rounded-xl border border-border/70 px-4 py-3 text-start">
+      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p className="mt-2 truncate text-2xl font-black tabular-nums text-foreground">{value}</p>
     </div>
   );
 }
 
-function CompactStatCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string | number;
-  tone: "neutral" | "positive" | "danger";
-}) {
-  const toneClass =
-    tone === "positive"
-      ? "border-emerald-200/70 bg-emerald-50/70 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
-      : tone === "danger"
-        ? "border-rose-200/70 bg-rose-50/70 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-        : "border-border bg-background/80 text-foreground";
+function sidebarActionClass(tone: "neutral" | "primary" | "danger") {
+  const base =
+    "inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition duration-300 hover:-translate-y-0.5";
+  if (tone === "primary") return `${base} border-primary bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-neon-blue dark:text-black`;
+  if (tone === "danger") return `${base} border-red-500/35 bg-red-500/10 text-red-200 hover:bg-red-500/15`;
+  return `${base} border-border/80 bg-black/45 text-foreground hover:border-primary/35 hover:bg-black/65`;
+}
 
+function SidebarActionLink({
+  href,
+  tone,
+  children,
+}: {
+  href: string;
+  tone: "neutral" | "primary" | "danger";
+  children: React.ReactNode;
+}) {
   return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-black">{value}</p>
-    </div>
+    <Link href={href} className={sidebarActionClass(tone)}>
+      {children}
+    </Link>
+  );
+}
+
+function SidebarActionButton({
+  onClick,
+  tone,
+  children,
+}: {
+  onClick: () => void;
+  tone: "neutral" | "primary" | "danger";
+  children: React.ReactNode;
+}) {
+  return (
+    <button type="button" onClick={onClick} className={sidebarActionClass(tone)}>
+      {children}
+    </button>
   );
 }
 

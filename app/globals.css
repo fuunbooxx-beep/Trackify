@@ -107,6 +107,143 @@
   @apply bg-card/80 backdrop-blur-md border border-border/50 shadow-sm dark:shadow-neon-blue/5;
 }
 
+/* Trackify target profile — cyber / verification shell */
+.trackify-profile-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.trackify-profile-page::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.55;
+  background: linear-gradient(
+    135deg,
+    rgba(250, 204, 21, 0.07) 0%,
+    transparent 42%,
+    rgba(245, 158, 11, 0.05) 100%
+  );
+}
+
+.dark .trackify-profile-page::before {
+  opacity: 0.85;
+}
+
+.trackify-cyber-grid {
+  background-image:
+    linear-gradient(rgba(250, 204, 21, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 204, 21, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, black 20%, transparent 75%);
+}
+
+.glass-cyber-card {
+  @apply rounded-2xl border border-border/60 bg-card/55 shadow-lg backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-950/45;
+  box-shadow:
+    0 0 0 1px rgba(250, 204, 21, 0.06),
+    0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.dark .glass-cyber-card {
+  /* Keep depth inside the card — avoid large yellow spill on the page */
+  box-shadow:
+    0 0 0 1px rgba(250, 204, 21, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.trackify-score-column {
+  --score-column-rgb: 148, 163, 184;
+  --score-column-alpha: 0;
+  --score-column-border-alpha: 0;
+  background:
+    linear-gradient(90deg, rgba(var(--score-column-rgb), var(--score-column-alpha)), transparent 72%),
+    rgba(2, 6, 23, 0.04);
+  border-inline-start: 1px solid rgba(var(--score-column-rgb), var(--score-column-border-alpha));
+}
+
+[dir="rtl"] .trackify-score-column {
+  background:
+    linear-gradient(270deg, rgba(var(--score-column-rgb), var(--score-column-alpha)), transparent 72%),
+    rgba(2, 6, 23, 0.04);
+}
+
+.trackify-score-column--danger {
+  --score-column-rgb: 239, 68, 68;
+  --score-column-alpha: 0.11;
+  --score-column-border-alpha: 0.24;
+}
+
+.trackify-score-column--warning {
+  --score-column-rgb: 250, 204, 21;
+  --score-column-alpha: 0.11;
+  --score-column-border-alpha: 0.24;
+}
+
+.trackify-score-column--trusted {
+  --score-column-rgb: 34, 197, 94;
+  --score-column-alpha: 0.1;
+  --score-column-border-alpha: 0.22;
+}
+
+.trackify-score-column--danger .glass-cyber-card,
+.trackify-score-column--warning .glass-cyber-card,
+.trackify-score-column--trusted .glass-cyber-card {
+  border-color: rgba(226, 232, 240, 0.76);
+  box-shadow: none;
+}
+
+.dark .trackify-score-column {
+  background:
+    linear-gradient(90deg, rgba(var(--score-column-rgb), var(--score-column-alpha)), transparent 72%),
+    rgba(2, 6, 23, 0.2);
+}
+
+[dir="rtl"] .dark .trackify-score-column {
+  background:
+    linear-gradient(270deg, rgba(var(--score-column-rgb), var(--score-column-alpha)), transparent 72%),
+    rgba(2, 6, 23, 0.2);
+}
+
+.dark .trackify-score-column--danger,
+.dark .trackify-score-column--warning,
+.dark .trackify-score-column--trusted {
+  --score-column-alpha: 0.14;
+  --score-column-border-alpha: 0.3;
+}
+
+.dark .trackify-score-column--danger .glass-cyber-card,
+.dark .trackify-score-column--warning .glass-cyber-card,
+.dark .trackify-score-column--trusted .glass-cyber-card {
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: none;
+}
+
+@media (min-width: 1280px) {
+  .trackify-profile-wide-row {
+    margin-inline-start: calc(-8rem - 1.5rem);
+    margin-inline-end: 0;
+    width: calc(100% + 8rem + 1.5rem);
+  }
+}
+
+@keyframes trackify-pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.trackify-soft-pulse {
+  animation: trackify-pulse-glow 3.5s ease-in-out infinite;
+}
+
 .input {
   @apply w-full rounded-xl border border-border bg-background px-3 py-3 text-sm font-medium outline-none transition focus:ring-2 focus:ring-primary dark:focus:ring-neon-blue;
 }

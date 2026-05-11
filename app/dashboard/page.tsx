@@ -36,6 +36,9 @@ import {
   getTargetCategoryLabel,
   getTargetHref,
   getTargetAliases,
+  getTargetKnownAliases,
+  getTargetLinkedIdentities,
+  getTargetPreviousNames,
   getTargetInstapays,
   getTargetLinks,
   getTargetPhones,
@@ -87,6 +90,8 @@ export default function DashboardPage() {
   const [createdAt, setCreatedAt] = useState<number | undefined>();
   const [name, setName] = useState("");
   const [aliases, setAliases] = useState<string[]>([""]);
+  const [previousNames, setPreviousNames] = useState<string[]>([""]);
+  const [linkedIdentities, setLinkedIdentities] = useState<string[]>([""]);
   const [type, setType] = useState("page");
   const [category, setCategory] = useState("gaming");
   const [phones, setPhones] = useState<string[]>([""]);
@@ -140,9 +145,13 @@ export default function DashboardPage() {
     () => links.map((link) => ({ ...link, url: link.url.trim() })).filter((link) => link.url),
     [links]
   );
+  const cleanIdentityTags = useMemo(
+    () => [...aliases, ...previousNames, ...linkedIdentities].map((s) => s.trim()).filter(Boolean),
+    [aliases, previousNames, linkedIdentities]
+  );
   const previewTerms = useMemo(
-    () => generateSearchTerms(name, cleanPhones, cleanLinks, aliases.map((alias) => alias.trim()).filter(Boolean)),
-    [name, cleanPhones, cleanLinks, aliases]
+    () => generateSearchTerms(name, cleanPhones, cleanLinks, cleanIdentityTags),
+    [name, cleanPhones, cleanLinks, cleanIdentityTags]
   );
   const isEditing = Boolean(targetId);
   const fuzzyThreshold = 0.84;
@@ -181,6 +190,8 @@ export default function DashboardPage() {
     setCreatedAt(undefined);
     setName("");
     setAliases([""]);
+    setPreviousNames([""]);
+    setLinkedIdentities([""]);
     setType("page");
     setCategory("gaming");
     setPhones([""]);
@@ -203,7 +214,9 @@ export default function DashboardPage() {
     setTargetId(id);
     setCreatedAt(target.createdAt);
     setName(target.name || "");
-    setAliases(getTargetAliases(target).length ? getTargetAliases(target) : [""]);
+    setAliases(getTargetKnownAliases(target).length ? getTargetKnownAliases(target) : [""]);
+    setPreviousNames(getTargetPreviousNames(target).length ? getTargetPreviousNames(target) : [""]);
+    setLinkedIdentities(getTargetLinkedIdentities(target).length ? getTargetLinkedIdentities(target) : [""]);
     setType(target.type || "page");
     setCategory(String(target.category || "gaming"));
     setPhones(normalizedPhones.length ? normalizedPhones : [""]);
@@ -351,7 +364,9 @@ export default function DashboardPage() {
       const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
       const payload = targetPayload({
         name: candidateName,
-        aliases: baseData ? getTargetAliases(baseData) : [],
+        aliases: baseData ? getTargetKnownAliases(baseData) : [],
+        previousNames: baseData ? getTargetPreviousNames(baseData) : [],
+        linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
         type: String(report.targetType || baseData?.type || "page"),
         category: String(baseData?.category || "gaming"),
         phones: [String(report.targetPhone || ""), ...(baseData ? getTargetPhones(baseData) : [])],
@@ -511,7 +526,9 @@ export default function DashboardPage() {
       const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
       const nextTargetPayload = targetPayload({
         name: manualTargetName.trim(),
-        aliases: baseData ? getTargetAliases(baseData) : [],
+        aliases: baseData ? getTargetKnownAliases(baseData) : [],
+        previousNames: baseData ? getTargetPreviousNames(baseData) : [],
+        linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
         type: String(baseData?.type || "page"),
         category: String(baseData?.category || "gaming"),
         phones: [manualTargetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
@@ -661,6 +678,22 @@ export default function DashboardPage() {
     setAliases((current) => (current.length === 1 ? [""] : current.filter((_, i) => i !== index)));
   };
 
+  const updatePreviousName = (index: number, value: string) => {
+    setPreviousNames((current) => current.map((item, i) => (i === index ? value : item)));
+  };
+
+  const removePreviousName = (index: number) => {
+    setPreviousNames((current) => (current.length === 1 ? [""] : current.filter((_, i) => i !== index)));
+  };
+
+  const updateLinkedIdentity = (index: number, value: string) => {
+    setLinkedIdentities((current) => current.map((item, i) => (i === index ? value : item)));
+  };
+
+  const removeLinkedIdentity = (index: number) => {
+    setLinkedIdentities((current) => (current.length === 1 ? [""] : current.filter((_, i) => i !== index)));
+  };
+
   const removeLink = (index: number) => {
     setLinks((current) => (current.length === 1 ? [{ ...emptyLink }] : current.filter((_, i) => i !== index)));
   };
@@ -792,6 +825,8 @@ export default function DashboardPage() {
       const payload = targetPayload({
         name,
         aliases,
+        previousNames,
+        linkedIdentities,
         type,
         category,
         phones,
@@ -988,7 +1023,11 @@ export default function DashboardPage() {
                 ))}
               </DynamicSection>
 
-              <DynamicSection title={lang === "ar" ? "\u0623\u0633\u0645\u0627\u0621 \u0623\u062e\u0631\u0649 \u0644\u0644\u0635\u0641\u062d\u0629" : "Other page names"} action={lang === "ar" ? "\u0625\u0636\u0627\u0641\u0629 \u0627\u0633\u0645" : "Add name"} onAdd={() => setAliases((current) => [...current, ""])}>
+              <DynamicSection
+                title={lang === "ar" ? "أسماء معروفة (Known aliases)" : "Known aliases"}
+                action={lang === "ar" ? "إضافة وسام" : "Add tag"}
+                onAdd={() => setAliases((current) => [...current, ""])}
+              >
                 {aliases.map((alias, index) => (
                   <div key={index} className="flex gap-2">
                     <div className="relative flex-1">
@@ -997,10 +1036,56 @@ export default function DashboardPage() {
                         value={alias}
                         onChange={(e) => updateAlias(index, e.target.value)}
                         className="input pl-10"
-                        placeholder={lang === "ar" ? "\u0627\u0633\u0645 \u0642\u062f\u064a\u0645 \u0623\u0648 \u0627\u0633\u0645 \u0628\u062f\u064a\u0644" : "Old name or alternative page name"}
+                        placeholder={lang === "ar" ? "مثال: Zero Lag Store" : "e.g. Zero Lag Store"}
                       />
                     </div>
-                    <IconButton label={lang === "ar" ? "\u062d\u0630\u0641 \u0627\u0644\u0627\u0633\u0645" : "Delete name"} onClick={() => removeAlias(index)}>
+                    <IconButton label={lang === "ar" ? "حذف" : "Remove"} onClick={() => removeAlias(index)}>
+                      <Trash2 className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                ))}
+              </DynamicSection>
+
+              <DynamicSection
+                title={lang === "ar" ? "أسماء سابقة (Previous names)" : "Previous names"}
+                action={lang === "ar" ? "إضافة وسام" : "Add tag"}
+                onAdd={() => setPreviousNames((current) => [...current, ""])}
+              >
+                {previousNames.map((prevName, index) => (
+                  <div key={index} className="flex gap-2">
+                    <div className="relative flex-1">
+                      <BadgeInfo className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        value={prevName}
+                        onChange={(e) => updatePreviousName(index, e.target.value)}
+                        className="input pl-10"
+                        placeholder={lang === "ar" ? "مثال: GS Gaming" : "e.g. GS Gaming"}
+                      />
+                    </div>
+                    <IconButton label={lang === "ar" ? "حذف" : "Remove"} onClick={() => removePreviousName(index)}>
+                      <Trash2 className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                ))}
+              </DynamicSection>
+
+              <DynamicSection
+                title={lang === "ar" ? "هويات مرتبطة (Linked identities)" : "Linked identities"}
+                action={lang === "ar" ? "إضافة وسام" : "Add tag"}
+                onAdd={() => setLinkedIdentities((current) => [...current, ""])}
+              >
+                {linkedIdentities.map((identity, index) => (
+                  <div key={index} className="flex gap-2">
+                    <div className="relative flex-1">
+                      <BadgeInfo className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        value={identity}
+                        onChange={(e) => updateLinkedIdentity(index, e.target.value)}
+                        className="input pl-10"
+                        placeholder={lang === "ar" ? "مثال: GS PS Hub" : "e.g. GS PS Hub"}
+                      />
+                    </div>
+                    <IconButton label={lang === "ar" ? "حذف" : "Remove"} onClick={() => removeLinkedIdentity(index)}>
                       <Trash2 className="h-4 w-4" />
                     </IconButton>
                   </div>

@@ -63,7 +63,7 @@ export function Navbar() {
   };
 
   return (
-    <nav className="fixed top-0 w-full z-50 glass-panel border-b border-white/10 dark:border-white/5 transition-all duration-300 overflow-visible">
+    <nav className="fixed inset-x-0 top-0 z-50 glass-panel border-b border-white/10 dark:border-white/5 transition-all duration-300 overflow-visible">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-3 overflow-visible">
           <Link

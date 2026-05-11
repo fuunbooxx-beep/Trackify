@@ -11,7 +11,21 @@ import { motion } from "motion/react";
 import { useLanguage } from "@/lib/i18n/context";
 import { isAdminUser } from "@/lib/auth-user";
 import { getAvatarUrl } from "@/lib/avatar";
-import { detectPlatform, getRiskStatusFromReportCount, getTargetAliases, getTargetLinks, getTargetPhones, getTargetReasons, normalizePhone, normalizeTargetName, normalizeUrl, targetPayload, type TargetRecord } from "@/lib/target-utils";
+import {
+  detectPlatform,
+  getRiskStatusFromReportCount,
+  getTargetKnownAliases,
+  getTargetLinkedIdentities,
+  getTargetLinks,
+  getTargetPhones,
+  getTargetPreviousNames,
+  getTargetReasons,
+  normalizePhone,
+  normalizeTargetName,
+  normalizeUrl,
+  targetPayload,
+  type TargetRecord,
+} from "@/lib/target-utils";
 import { detectExistingTargetMatch } from "@/lib/target-linking";
 import { classifyEvidenceTier } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
@@ -377,7 +391,9 @@ function ReportContent() {
       const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
       const mergedPayload = targetPayload({
         name: targetName.trim(),
-        aliases: baseData ? getTargetAliases(baseData) : [],
+        aliases: baseData ? getTargetKnownAliases(baseData) : [],
+        previousNames: baseData ? getTargetPreviousNames(baseData) : [],
+        linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
         type: String(baseData?.type || "page"),
         phones: [targetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
         links: [{ platform: detectPlatform(targetLink.trim()), url: targetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],

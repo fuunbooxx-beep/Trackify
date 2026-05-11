@@ -22,7 +22,10 @@ export type TargetCategoryOption = {
 export type TargetRecord = {
   id?: string;
   name?: string;
+  /** Also displayed as "Known aliases" */
   aliases?: string[];
+  previousNames?: string[];
+  linkedIdentities?: string[];
   type?: string;
   phone?: string;
   phones?: string[];
@@ -474,8 +477,41 @@ export function normalizeTargetAliases(aliases: unknown) {
     });
 }
 
-export function getTargetAliases(target: TargetRecord) {
+/** Dedupe across lists by normalized name; preserves first spelling. */
+function mergeUniqueAliasValues(...lists: string[][]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const list of lists) {
+    for (const raw of list) {
+      const t = String(raw || "").trim();
+      const key = normalizeTargetName(t);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(t);
+    }
+  }
+  return out;
+}
+
+export function getTargetKnownAliases(target: TargetRecord) {
   return normalizeTargetAliases(target.aliases);
+}
+
+export function getTargetPreviousNames(target: TargetRecord) {
+  return normalizeTargetAliases(target.previousNames);
+}
+
+export function getTargetLinkedIdentities(target: TargetRecord) {
+  return normalizeTargetAliases(target.linkedIdentities);
+}
+
+/** All identity tags — for search, reports, and filters. */
+export function getTargetAliases(target: TargetRecord) {
+  return mergeUniqueAliasValues(
+    getTargetKnownAliases(target),
+    getTargetPreviousNames(target),
+    getTargetLinkedIdentities(target)
+  );
 }
 
 export function generateSearchTerms(name: string, phones: string[], links: TargetLink[], aliases: string[] = []) {
@@ -505,6 +541,8 @@ export function generateSearchTerms(name: string, phones: string[], links: Targe
 export function targetPayload(input: {
   name: string;
   aliases?: string[];
+  previousNames?: string[];
+  linkedIdentities?: string[];
   type: string;
   phones: string[];
   instapays?: string[];
@@ -529,11 +567,16 @@ export function targetPayload(input: {
   const now = Date.now();
   const reasons = normalizeTargetReasons(input.reasons);
   const aliases = normalizeTargetAliases(input.aliases);
+  const previousNames = normalizeTargetAliases(input.previousNames);
+  const linkedIdentities = normalizeTargetAliases(input.linkedIdentities);
+  const allIdentityForSearch = mergeUniqueAliasValues(aliases, previousNames, linkedIdentities);
   const category = normalizeTargetCategory(input.category);
 
   return {
     name: input.name.trim(),
     aliases,
+    previousNames,
+    linkedIdentities,
     type: input.type.trim().toLowerCase() || "page",
     phone: phones[0] || "",
     phones,
@@ -548,7 +591,7 @@ export function targetPayload(input: {
     reasons,
     category,
     claimedByUserId: input.claimedByUserId.trim() || null,
-    searchTerms: [...generateSearchTerms(input.name, phones, links, aliases), ...instapays.map((item) => item.toLowerCase()), category],
+    searchTerms: [...generateSearchTerms(input.name, phones, links, allIdentityForSearch), ...instapays.map((item) => item.toLowerCase()), category],
     createdAt: input.createdAt || now,
     updatedAt: now,
   };
