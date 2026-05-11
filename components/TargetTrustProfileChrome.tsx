@@ -386,7 +386,7 @@ export function EvidencePreviewGallery({
     <div className="glass-cyber-card rounded-2xl p-4 md:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Camera className="h-4 w-4 text-primary dark:text-neon-blue" />
+          <Camera className="h-4 w-4 text-amber-700 dark:text-neon-blue" />
           <span className="text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground">
             {lang === "ar" ? "معاينة الأدلة" : "Evidence preview"}
           </span>
@@ -395,7 +395,7 @@ export function EvidencePreviewGallery({
           <button
             type="button"
             onClick={onViewMore}
-            className="inline-flex items-center gap-1 rounded-full border border-primary/35 bg-primary/10 px-3 py-1 text-xs font-black text-primary transition hover:bg-primary/20 dark:border-neon-blue/40 dark:bg-neon-blue/10 dark:text-neon-blue dark:hover:bg-neon-blue/20"
+            className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 transition hover:bg-amber-100 dark:border-neon-blue/40 dark:bg-neon-blue/10 dark:text-neon-blue dark:hover:bg-neon-blue/20"
           >
             +{extraCount} {lang === "ar" ? "أدلة إضافية" : "more evidence"}
             <ChevronRight className="h-3.5 w-3.5" />
@@ -443,10 +443,10 @@ export function SafetyBeforePayCard({ lang }: { lang: "en" | "ar" }) {
         ];
 
   return (
-    <div className="glass-cyber-card rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/5 via-transparent to-amber-500/5 p-4 md:p-5 dark:from-neon-blue/10 dark:to-amber-500/10">
+    <div className="glass-cyber-card rounded-2xl border border-amber-300/70 bg-gradient-to-br from-amber-50 via-transparent to-amber-100/60 p-4 md:p-5 dark:border-primary/25 dark:from-neon-blue/10 dark:to-amber-500/10">
       <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10 dark:border-neon-blue/35 dark:bg-neon-blue/10">
-          <Sparkles className="h-5 w-5 text-primary dark:text-neon-blue" />
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-amber-300 bg-amber-50 dark:border-neon-blue/35 dark:bg-neon-blue/10">
+          <Sparkles className="h-5 w-5 text-amber-700 dark:text-neon-blue" />
         </span>
         <div className="min-w-0">
           <h3 className="text-sm font-black uppercase tracking-[0.12em] text-foreground md:text-base">

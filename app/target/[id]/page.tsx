@@ -65,7 +65,6 @@ import { classifyEvidenceTier, formatEvidenceTierLabel } from "@/lib/evidence-cl
 import { syncTargetStats } from "@/lib/trust-score";
 import {
   BehaviorFlagStrip,
-  buildBehaviorSummary,
   deriveReportStats,
   EvidencePreviewGallery,
   SafetyBeforePayCard,
@@ -816,10 +815,10 @@ export default function TargetDetailsPage() {
           />
           <div className="relative z-10 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-6 p-4 sm:p-5 md:p-8 xl:p-9">
-              <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
+              <div className="flex min-w-0 flex-col gap-7 lg:flex-row lg:items-start lg:gap-10 xl:gap-12">
                 <LogoBlock logoUrl={target.logoUrl || ""} name={target.name || ""} />
 
-                <div className="min-w-0 flex-1 space-y-4 text-center sm:text-start">
+                <div className="min-w-0 flex-1 space-y-4 text-center sm:text-start lg:ps-2 lg:pt-2 xl:ps-4">
                   <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
                     <span className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/70 px-3 py-1 text-xs font-black uppercase tracking-wide">
                       <BadgeInfo className="w-4 h-4" />
@@ -827,18 +826,18 @@ export default function TargetDetailsPage() {
                     </span>
                     <Link
                       href={`/category#${categorySlug}`}
-                      className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-black text-primary transition hover:bg-primary/15 dark:border-neon-blue/30 dark:bg-neon-blue/10 dark:text-neon-blue"
+                      className="inline-flex max-w-full items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 transition hover:bg-amber-100 dark:border-neon-blue/30 dark:bg-neon-blue/10 dark:text-neon-blue dark:hover:bg-neon-blue/15"
                     >
                       <Layers className="h-4 w-4 shrink-0" />
                       <span className="max-w-[220px] truncate">{categoryLabel}</span>
                     </Link>
                     {categorySlug === "gaming" ? (
-                      <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-orange-300 bg-orange-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-orange-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                         {lang === "ar" ? "سوق" : "Marketplace"}
                       </span>
                     ) : null}
                     {target.claimedByUserId && (
-                      <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-black text-primary dark:text-neon-blue">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 dark:border-primary/30 dark:bg-primary/10 dark:text-neon-blue">
                         <ShieldCheck className="w-4 h-4" />
                         {lang === "ar" ? "بائع موثق" : "Verified seller"}
                       </span>
@@ -852,12 +851,18 @@ export default function TargetDetailsPage() {
                   {knownAliases.length > 0 || previousNames.length > 0 || linkedIdentities.length > 0 ? (
                     <div className="flex w-full flex-col gap-4 text-start">
                       {knownAliases.length > 0 ? (
-                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-                          <span className="font-black uppercase tracking-[0.14em] text-muted-foreground">
+                        <div className="flex flex-wrap items-center justify-center gap-2 text-sm sm:justify-start">
+                          <span className="text-xs font-black uppercase tracking-[0.1em] text-muted-foreground">
                             {lang === "ar" ? "أسماء معروفة" : "Known aliases"}
                           </span>
-                          <span className="text-muted-foreground">:</span>
-                          <span className="font-bold text-foreground/90">{knownAliases.join(" / ")}</span>
+                          {knownAliases.map((alias) => (
+                            <span
+                              key={`ka-${alias}`}
+                              className="inline-flex max-w-full items-center rounded-full border border-primary/25 bg-background/70 px-3.5 py-1.5 text-sm font-black text-foreground/90 shadow-[0_0_18px_rgba(250,204,21,0.08)] backdrop-blur dark:border-neon-blue/25 dark:bg-slate-950/55"
+                            >
+                              <span className="truncate">{alias}</span>
+                            </span>
+                          ))}
                         </div>
                       ) : null}
                       {previousNames.length > 0 ? (
@@ -896,15 +901,13 @@ export default function TargetDetailsPage() {
                       ) : null}
                     </div>
                   ) : null}
-
-                  <p className="trackify-profile-wide-row glass-cyber-card mx-auto w-full max-w-full border-s-4 border-s-primary/55 px-4 py-3 text-sm leading-relaxed text-muted-foreground md:text-base sm:mx-0 xl:max-w-3xl dark:border-s-neon-blue/45">
-                    {buildBehaviorSummary(target, reportDerived, lang)}
-                  </p>
+                </div>
+              </div>
 
                   <div className="trackify-profile-wide-row flex justify-center sm:justify-start">
                     <Link
                       href={`${getTargetHref({ id: activeTargetId, name: target.name })}/about`}
-                      className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-primary/35 bg-primary/10 px-6 py-2.5 text-sm font-black text-primary transition duration-300 hover:-translate-y-0.5 hover:border-primary/55 hover:bg-primary/18 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] dark:border-neon-blue/40 dark:bg-neon-blue/10 dark:text-neon-blue dark:hover:shadow-[0_0_28px_rgba(250,204,21,0.12)]"
+                      className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-amber-300 bg-amber-50 px-6 py-2.5 text-sm font-black text-amber-700 transition duration-300 hover:-translate-y-0.5 hover:border-amber-400 hover:bg-amber-100 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] dark:border-neon-blue/40 dark:bg-neon-blue/10 dark:text-neon-blue dark:hover:shadow-[0_0_28px_rgba(250,204,21,0.12)]"
                     >
                       <BadgeInfo className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
                       <span className="leading-tight">{lang === "ar" ? `عن ${target.name}` : `About ${target.name}`}</span>
@@ -1010,9 +1013,6 @@ export default function TargetDetailsPage() {
                     </div>
                   </div>
 
-                </div>
-              </div>
-
                   <div
                     className={`glass-cyber-card rounded-2xl border px-4 py-3 text-sm md:text-[15px] ${
                       isDealNotRecommended
@@ -1025,7 +1025,7 @@ export default function TargetDetailsPage() {
                         className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
                           isDealNotRecommended
                             ? "bg-destructive/15 text-destructive"
-                            : "bg-primary/10 text-primary dark:bg-neon-blue/10 dark:text-neon-blue"
+                            : "border border-amber-200 bg-amber-50 text-amber-700 dark:border-transparent dark:bg-neon-blue/10 dark:text-neon-blue"
                         }`}
                       >
                         {isDealNotRecommended ? <AlertTriangle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
@@ -1118,6 +1118,7 @@ export default function TargetDetailsPage() {
                   <Metric
                     label={lang === "ar" ? "آخر نشاط" : "Last activity"}
                     value={reportDerived.lastActivityAt ? formatRelativeDate(reportDerived.lastActivityAt, lang) : "—"}
+                    compact
                   />
                   <Metric
                     label={lang === "ar" ? "نسبة النجاح" : "Success ratio"}
@@ -1126,6 +1127,7 @@ export default function TargetDetailsPage() {
                   <Metric
                     label={lang === "ar" ? "آخر بلاغ نصب" : "Last scam report"}
                     value={isNoData ? "—" : lastScamLabel}
+                    compact
                   />
                   <Metric label={lang === "ar" ? "روابط" : "Links"} value={links.length} />
                   <Metric label={lang === "ar" ? "أرقام" : "Phones"} value={phones.length} />
@@ -1890,11 +1892,11 @@ function InfoGroup({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
+function Metric({ label, value, compact = false }: { label: string; value: string | number; compact?: boolean }) {
   return (
     <div className="glass-cyber-card min-h-[82px] rounded-xl border border-border/70 px-4 py-3 text-start">
       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-      <p className="mt-2 truncate text-2xl font-black tabular-nums text-foreground">{value}</p>
+      <p className={`mt-2 truncate font-black tabular-nums text-foreground ${compact ? "text-lg leading-tight" : "text-2xl"}`}>{value}</p>
     </div>
   );
 }
@@ -1902,9 +1904,9 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 function sidebarActionClass(tone: "neutral" | "primary" | "danger") {
   const base =
     "inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition duration-300 hover:-translate-y-0.5";
-  if (tone === "primary") return `${base} border-primary bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-neon-blue dark:text-black`;
-  if (tone === "danger") return `${base} border-red-500/35 bg-red-500/10 text-red-200 hover:bg-red-500/15`;
-  return `${base} border-border/80 bg-black/45 text-foreground hover:border-primary/35 hover:bg-black/65`;
+  if (tone === "primary") return `${base} border-amber-400 bg-amber-400 text-slate-950 hover:bg-amber-300 dark:border-neon-blue dark:bg-neon-blue dark:text-black dark:hover:bg-neon-blue`;
+  if (tone === "danger") return `${base} border-red-400/70 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-500/35 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/15`;
+  return `${base} border-slate-300 bg-slate-100 text-slate-900 hover:border-slate-400 hover:bg-slate-200 dark:border-border/80 dark:bg-black/45 dark:text-foreground dark:hover:border-primary/35 dark:hover:bg-black/65`;
 }
 
 function SidebarActionLink({
