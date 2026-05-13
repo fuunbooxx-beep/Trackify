@@ -99,6 +99,13 @@ export const TARGET_CATEGORY_OPTIONS: TargetCategoryOption[] = [
     descriptionEn: "Food stores, restaurants, delivery pages, and kitchen businesses.",
     descriptionAr: "متاجر الأكل، المطاعم، صفحات الدليفري، ومشاريع المأكولات.",
   },
+  {
+    value: "furniture",
+    labelEn: "Furniture",
+    labelAr: "الأثاث",
+    descriptionEn: "Furniture stores, home decor sellers, and wood or upholstery businesses.",
+    descriptionAr: "متاجر الأثاث، بائعي الديكور المنزلي، ومشاريع الخشب والتنجيد.",
+  },
 ];
 
 export type TargetStatsRecord = {
