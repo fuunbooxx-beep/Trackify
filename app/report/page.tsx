@@ -26,7 +26,8 @@ import {
   targetPayload,
   type TargetRecord,
 } from "@/lib/target-utils";
-import { detectExistingTargetMatch } from "@/lib/target-linking";
+import { detectExistingTargetMatch, isAuthoritativeTargetMatch } from "@/lib/target-linking";
+import { PENDING_REPORT_TARGET_PLACEHOLDER_ID } from "@/lib/pending-report";
 import { classifyEvidenceTier } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
 import {
@@ -154,7 +155,7 @@ function ReportContent() {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [successKind, setSuccessKind] = useState<null | "published" | "pending_review">(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [uploadNotice, setUploadNotice] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
@@ -384,72 +385,135 @@ function ReportContent() {
         { targetName: normalizedTargetName, targetPhone: targetPhone, targetLink: targetLink },
         targetPool
       );
-      const existingDoc = bestMatch.target;
-      const baseData = existingDoc as TargetRecord | undefined;
-      const resolvedTargetId = existingDoc?.id || `target_${Date.now()}`;
+      const linkedToExisting = isAuthoritativeTargetMatch(bestMatch);
+      const adminBypass = isAdmin && reportAsAdmin;
 
-      const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
-      const mergedPayload = targetPayload({
-        name: targetName.trim(),
-        aliases: baseData ? getTargetKnownAliases(baseData) : [],
-        previousNames: baseData ? getTargetPreviousNames(baseData) : [],
-        linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
-        type: String(baseData?.type || "page"),
-        phones: [targetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
-        links: [{ platform: detectPlatform(targetLink.trim()), url: targetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
-        logoUrl: String(baseData?.logoUrl || ""),
-        status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
-        trustScore: Number(baseData?.trustScore ?? 45),
-        reportCount: nextReportCount,
-        reasons: baseData ? getTargetReasons(baseData) : [],
-        claimedByUserId: String(baseData?.claimedByUserId || ""),
-        createdAt: baseData?.createdAt,
-      });
-      await setDoc(doc(db, "targets", resolvedTargetId), mergedPayload, { merge: true });
+      if (!linkedToExisting && !adminBypass) {
+        const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
+        const reportAuthorId = user?.uid || `guest_${Date.now()}`;
+        const reportRef = await addDoc(collection(db, "reports"), {
+          targetId: PENDING_REPORT_TARGET_PLACEHOLDER_ID,
+          authorId: reportAuthorId,
+          authorEmail: user?.email || "",
+          reporterName: sanitizedReporterName,
+          isAnonymousReporter: anonymousMode,
+          authorPhotoURL: anonymousMode ? getAvatarUrl(null) : getAvatarUrl(user?.photoURL),
+          isGuest: !user,
+          targetName: targetName.trim(),
+          targetNameKey: duplicateCheckKey,
+          targetPhone: normalizePhone(targetPhone.trim()),
+          targetLink: normalizeUrl(targetLink.trim()),
+          category: category,
+          description: sanitizedDescription,
+          descriptionHash,
+          evidenceImages: uploadedImageUrls,
+          evidenceTier,
+          status: "pending",
+          adminVerified: false,
+          adminPinned: false,
+          allowUserEdit: false,
+          editRequestPending: false,
+          reviewNote: "",
+          source: anonymousMode ? "user_anonymous" : "user",
+          createdAt: Date.now(),
+        });
 
-      const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
-      const reportAuthorId = user?.uid || `guest_${Date.now()}`;
-      const reportRef = await addDoc(collection(db, "reports"), {
-        targetId: resolvedTargetId,
-        authorId: reportAuthorId,
-        authorEmail: user?.email || "",
-        reporterName: sanitizedReporterName,
-        isAnonymousReporter: anonymousMode,
-        authorPhotoURL: anonymousMode ? getAvatarUrl(null) : getAvatarUrl(user?.photoURL),
-        isGuest: !user,
-        targetName: targetName.trim(),
-        targetNameKey: duplicateCheckKey,
-        targetPhone: normalizePhone(targetPhone.trim()),
-        targetLink: normalizeUrl(targetLink.trim()),
-        category: category,
-        description: sanitizedDescription,
-        descriptionHash,
-        evidenceImages: uploadedImageUrls,
-        evidenceTier,
-        status: "approved",
-        adminVerified: isAdmin && reportAsAdmin,
-        adminPinned: isAdmin && reportAsAdmin,
-        allowUserEdit: false,
-        editRequestPending: false,
-        reviewNote: "",
-        source: isAdmin && reportAsAdmin ? "admin_direct" : anonymousMode ? "user_anonymous" : "user",
-        createdAt: Date.now(),
-        reviewedAt: Date.now(),
-      });
+        if (user) {
+          await addDoc(collection(db, "notifications"), {
+            userId: user.uid,
+            reportId: reportRef.id,
+            status: "pending",
+            title: lang === "ar" ? "تم استلام البلاغ للمراجعة" : "Report received for review",
+            message:
+              lang === "ar"
+                ? "هنتحقق من اسم الصفحة والبيانات. لو كل حاجة مظبوطة هيتم إنشاء الهدف ونشر تجربتك."
+                : "We'll verify the page details. If everything checks out, we'll create the target and publish your report.",
+            read: false,
+            createdAt: Date.now(),
+          });
+        }
 
-      if (!(isAdmin && reportAsAdmin) && user) {
         await addDoc(collection(db, "notifications"), {
-          userId: user.uid,
+          userId: "admin_broadcast",
+          audience: "admin",
           reportId: reportRef.id,
-          status: "approved",
-          title: lang === "ar" ? "تم نشر البلاغ" : "Report published",
-          message: lang === "ar" ? "تم نشر بلاغك تلقائياً بنجاح." : "Your report has been published automatically.",
+          status: "pending",
+          title: lang === "ar" ? "بلاغ جديد بحاجة لمراجعة الهدف" : "New report needs target verification",
+          message:
+            lang === "ar"
+              ? `اسم الصفحة المذكورة غير موجود تطابقًا تامًا: "${targetName.trim()}". راجع قائمة البلاغات المعلقة.`
+              : `No exact existing target matched the submitted name "${targetName.trim()}". Review the pending queue.`,
           read: false,
           createdAt: Date.now(),
         });
-      }
-      if (resolvedTargetId) {
-        await syncTargetStats(db, resolvedTargetId);
+      } else {
+        const existingDoc = linkedToExisting ? bestMatch.target : undefined;
+        const baseData = existingDoc as TargetRecord | undefined;
+        const resolvedTargetId = existingDoc?.id || `target_${Date.now()}`;
+
+        const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
+        const mergedPayload = targetPayload({
+          name: targetName.trim(),
+          aliases: baseData ? getTargetKnownAliases(baseData) : [],
+          previousNames: baseData ? getTargetPreviousNames(baseData) : [],
+          linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
+          type: String(baseData?.type || "page"),
+          phones: [targetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
+          links: [{ platform: detectPlatform(targetLink.trim()), url: targetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
+          logoUrl: String(baseData?.logoUrl || ""),
+          status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
+          trustScore: Number(baseData?.trustScore ?? 45),
+          reportCount: nextReportCount,
+          reasons: baseData ? getTargetReasons(baseData) : [],
+          claimedByUserId: String(baseData?.claimedByUserId || ""),
+          createdAt: baseData?.createdAt,
+        });
+        await setDoc(doc(db, "targets", resolvedTargetId), mergedPayload, { merge: true });
+
+        const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
+        const reportAuthorId = user?.uid || `guest_${Date.now()}`;
+        const reportRef = await addDoc(collection(db, "reports"), {
+          targetId: resolvedTargetId,
+          authorId: reportAuthorId,
+          authorEmail: user?.email || "",
+          reporterName: sanitizedReporterName,
+          isAnonymousReporter: anonymousMode,
+          authorPhotoURL: anonymousMode ? getAvatarUrl(null) : getAvatarUrl(user?.photoURL),
+          isGuest: !user,
+          targetName: targetName.trim(),
+          targetNameKey: duplicateCheckKey,
+          targetPhone: normalizePhone(targetPhone.trim()),
+          targetLink: normalizeUrl(targetLink.trim()),
+          category: category,
+          description: sanitizedDescription,
+          descriptionHash,
+          evidenceImages: uploadedImageUrls,
+          evidenceTier,
+          status: "approved",
+          adminVerified: isAdmin && reportAsAdmin,
+          adminPinned: isAdmin && reportAsAdmin,
+          allowUserEdit: false,
+          editRequestPending: false,
+          reviewNote: "",
+          source: isAdmin && reportAsAdmin ? "admin_direct" : anonymousMode ? "user_anonymous" : "user",
+          createdAt: Date.now(),
+          reviewedAt: Date.now(),
+        });
+
+        if (!(isAdmin && reportAsAdmin) && user) {
+          await addDoc(collection(db, "notifications"), {
+            userId: user.uid,
+            reportId: reportRef.id,
+            status: "approved",
+            title: lang === "ar" ? "تم نشر البلاغ" : "Report published",
+            message: lang === "ar" ? "تم نشر بلاغك تلقائياً بنجاح." : "Your report has been published automatically.",
+            read: false,
+            createdAt: Date.now(),
+          });
+        }
+        if (resolvedTargetId && resolvedTargetId !== PENDING_REPORT_TARGET_PLACEHOLDER_ID) {
+          await syncTargetStats(db, resolvedTargetId);
+        }
       }
 
       imagePreviews.forEach((url) => URL.revokeObjectURL(url));
@@ -464,7 +528,7 @@ function ReportContent() {
         setTargetLink("");
       }
       setCaptchaToken("");
-      setSuccess(true);
+      setSuccessKind(linkedToExisting || adminBypass ? "published" : "pending_review");
       window.requestAnimationFrame(() => {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
       });
@@ -499,11 +563,35 @@ function ReportContent() {
         <p className="text-muted-foreground font-medium">{lang === "ar" ? "قدم دليلك وساعدنا نحذر غيرك من النصابين." : "Share your evidence and help protect others from scammers."}</p>
       </div>
 
-      {success ? (
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel p-10 rounded-3xl text-center border-green-500/30">
-          <CheckCircle2 className="w-20 h-20 text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">{lang === "ar" ? "تم إرسال تجربتك بنجاح ✅" : "Your experience was submitted successfully ✅"}</h2>
-          <p className="text-muted-foreground">{lang === "ar" ? "يمكنك إنشاء حساب لاحقًا لإدارة بلاغاتك أو تعديلها." : "You can create an account later to manage or edit your reports."}</p>
+      {successKind ? (
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className={`glass-panel p-10 rounded-3xl text-center ${
+            successKind === "pending_review" ? "border-amber-500/35" : "border-green-500/30"
+          }`}
+        >
+          <CheckCircle2
+            className={`w-20 h-20 mx-auto mb-4 ${successKind === "pending_review" ? "text-amber-500" : "text-green-500"}`}
+          />
+          <h2 className="text-2xl font-bold mb-2">
+            {successKind === "pending_review"
+              ? lang === "ar"
+                ? "تم استلام البلاغ — قيد التحقق ⏳"
+                : "Report received — verification in progress ⏳"
+              : lang === "ar"
+                ? "تم إرسال تجربتك بنجاح ✅"
+                : "Your experience was submitted successfully ✅"}
+          </h2>
+          <p className="text-muted-foreground">
+            {successKind === "pending_review"
+              ? lang === "ar"
+                ? "لم نجد صفحة بنفس الاسم بالضبط في قاعدة البيانات. فريق المراجعة هيتأكد من البيانات ويضيف الصفحة كهدف لو المعلومات صح، وبعدها هيتم نشر بلاغك."
+                : "We did not find a page with that exact name in our database yet. Our team will verify your details and, if confirmed, we'll add the target and publish your report."
+              : lang === "ar"
+                ? "يمكنك إنشاء حساب لاحقًا لإدارة بلاغاتك أو تعديلها."
+                : "You can create an account later to manage or edit your reports."}
+          </p>
         </motion.div>
       ) : (
         <form onSubmit={handleSubmit} className="glass-panel p-6 md:p-10 rounded-3xl space-y-6">

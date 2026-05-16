@@ -9,6 +9,7 @@ import { mapSupabaseUser, type AppUser } from "@/lib/auth-user";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { LanguageProvider } from "@/lib/i18n/context";
 import { RouteLoadingController } from "@/components/RouteLoadingController";
+import { VisitLogBeacon } from "@/components/VisitLogBeacon";
 
 export const AuthContext = React.createContext<{ user: AppUser | null; loading: boolean }>({
   user: null,
@@ -87,7 +88,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <Suspense fallback={null}>
           <RouteLoadingController />
         </Suspense>
-        <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>
+        <AuthContext.Provider value={{ user, loading }}>
+          <Suspense fallback={null}>
+            <VisitLogBeacon />
+          </Suspense>
+          {children}
+        </AuthContext.Provider>
       </LanguageProvider>
     </NextThemesProvider>
   );

@@ -87,5 +87,30 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true; // Keep profile sync working with current auth architecture
     }
+
+    // Site visit logs (written via server route + client-backed rules)
+    match /visitorLogs/{logId} {
+      allow get, list: if true;
+      allow create: if isValidId(logId)
+        && incoming().path is string
+        && incoming().path.size() > 0
+        && incoming().path.size() <= 512
+        && incoming().createdAt is number;
+      allow update, delete: if isAdmin();
+    }
+
+    // IP blocks (middleware checks via REST; dashboard writes from trusted admin session)
+    match /blockedIps/{blockId} {
+      allow get, list: if true;
+      allow create: if isAdmin()
+        && isValidId(blockId)
+        && incoming().keys().hasAll(['ip', 'createdAt'])
+        && incoming().ip is string
+        && incoming().ip.size() > 0
+        && incoming().ip.size() <= 64
+        && incoming().createdAt is number;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
   }
 }

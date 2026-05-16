@@ -1,4 +1,12 @@
-import { getTargetLinks, getTargetPhones, normalizePhone, normalizeTargetName, normalizeUrl, type TargetRecord } from "@/lib/target-utils";
+import {
+  getTargetLinks,
+  getTargetPhones,
+  getTargetAliases,
+  normalizePhone,
+  normalizeTargetName,
+  normalizeUrl,
+  type TargetRecord,
+} from "@/lib/target-utils";
 
 function levenshteinDistance(a: string, b: string) {
   if (a === b) return 0;
@@ -26,20 +34,44 @@ function nameSimilarity(a: string, b: string) {
   return maxLen === 0 ? 1 : 1 - distance / maxLen;
 }
 
+/** Exact identity match: primary display name or any saved alias / previous / linked identity. */
+export function targetNameMatchesExactly(candidateName: string, item: TargetRecord): boolean {
+  const norm = normalizeTargetName(candidateName);
+  if (!norm) return false;
+  const primary = normalizeTargetName(String(item.name || ""));
+  if (norm === primary) return true;
+  for (const tag of getTargetAliases(item)) {
+    if (normalizeTargetName(tag) === norm) return true;
+  }
+  return false;
+}
+
 export type MatchReason = "phone" | "link" | "name";
+
+export type TargetMatchResult = {
+  /** Set only for phone / link / exact-name matches — never for fuzzy-only similarity. */
+  target?: TargetRecord;
+  score: number;
+  reason?: MatchReason;
+  /** Strongest fuzzy name similarity when there is no authoritative match (UI hint for admins). */
+  nameFuzzyBest?: { target: TargetRecord; score: number };
+};
+
+export function isAuthoritativeTargetMatch(result: TargetMatchResult): result is TargetMatchResult & { target: TargetRecord; reason: MatchReason } {
+  return Boolean(result.target && (result.reason === "phone" || result.reason === "link" || result.reason === "name"));
+}
 
 export function detectExistingTargetMatch(
   report: { targetName?: string; targetPhone?: string; targetLink?: string },
   pool: TargetRecord[]
-): { target?: TargetRecord; score: number; reason?: MatchReason } {
+): TargetMatchResult {
   const candidateName = String(report.targetName || "").trim();
   const candidatePhone = normalizePhone(String(report.targetPhone || ""));
   const candidateLink = normalizeUrl(String(report.targetLink || "")).toLowerCase();
   if (!candidateName && !candidatePhone && !candidateLink) return { score: 0 };
 
-  let bestTarget: TargetRecord | undefined;
-  let bestScore = 0;
-  let reason: MatchReason | undefined;
+  let fuzzyBestScore = 0;
+  let fuzzyBestTarget: TargetRecord | undefined;
 
   for (const item of pool) {
     const targetPhones = getTargetPhones(item).map((phone) => normalizePhone(phone));
@@ -51,14 +83,21 @@ export function detectExistingTargetMatch(
     if (candidateLink && targetLinks.includes(candidateLink)) {
       return { target: item, score: 1, reason: "link" };
     }
+  }
 
+  for (const item of pool) {
+    if (targetNameMatchesExactly(candidateName, item)) {
+      return { target: item, score: 1, reason: "name" };
+    }
     const similarity = nameSimilarity(candidateName, String(item.name || ""));
-    if (similarity > bestScore) {
-      bestScore = similarity;
-      bestTarget = item;
-      reason = "name";
+    if (similarity > fuzzyBestScore) {
+      fuzzyBestScore = similarity;
+      fuzzyBestTarget = item;
     }
   }
 
-  return { target: bestTarget, score: bestScore, reason };
+  if (fuzzyBestTarget && fuzzyBestScore > 0) {
+    return { score: fuzzyBestScore, nameFuzzyBest: { target: fuzzyBestTarget, score: fuzzyBestScore } };
+  }
+  return { score: 0 };
 }

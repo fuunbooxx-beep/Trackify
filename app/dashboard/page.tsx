@@ -5,8 +5,21 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AuthContext } from "@/lib/providers";
 import { isAdminUser } from "@/lib/auth-user";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
-import { notFound, useRouter } from "next/navigation";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+import { notFound, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
@@ -16,7 +29,9 @@ import {
   Facebook,
   Globe2,
   Instagram,
+  LayoutDashboard,
   Link as LinkIcon,
+  ListChecks,
   Loader2,
   Image as ImageIcon,
   Pencil,
@@ -25,8 +40,10 @@ import {
   PlusCircle,
   Save,
   Send,
+  ShieldBan,
   Trash2,
   UploadCloud,
+  Users,
   Youtube,
 } from "lucide-react";
 import {
@@ -51,12 +68,17 @@ import {
   type TargetLink,
   type TargetRecord,
 } from "@/lib/target-utils";
-import { detectExistingTargetMatch, type MatchReason } from "@/lib/target-linking";
+import {
+  detectExistingTargetMatch,
+  isAuthoritativeTargetMatch,
+  type TargetMatchResult,
+} from "@/lib/target-linking";
 import { mergeDuplicateTargetIntoCanonical } from "@/lib/merge-targets";
 import { findSharedPhoneClusters } from "@/lib/phone-patterns";
 import { classifyEvidenceTier } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
 import { useLanguage } from "@/lib/i18n/context";
+import { clientIpToBlockedDocId } from "@/lib/ip-block";
 
 const STATUS_OPTIONS = [
   { value: "warning", labelEn: "Warning", labelAr: "تحذير" },
@@ -140,6 +162,73 @@ export default function DashboardPage() {
   const [targetSearch, setTargetSearch] = useState("");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
 
+  type DashboardTab = "targets" | "pending" | "visitors" | "all-reports";
+  const searchParams = useSearchParams();
+  const activeTab = useMemo<DashboardTab>(() => {
+    const t = searchParams.get("tab");
+    if (t === "pending" || t === "visitors" || t === "all-reports") return t;
+    return "targets";
+  }, [searchParams]);
+
+  const [visitorLogs, setVisitorLogs] = useState<any[]>([]);
+  const [visitorLogsLoading, setVisitorLogsLoading] = useState(false);
+  const [blockedIpRows, setBlockedIpRows] = useState<{ id: string; ip?: string; createdAt?: number }[]>([]);
+  const [blockingIpBusy, setBlockingIpBusy] = useState<string | null>(null);
+
+  const [allSiteReports, setAllSiteReports] = useState<any[]>([]);
+  const [allReportsLoading, setAllReportsLoading] = useState(false);
+  const [allReportsSearch, setAllReportsSearch] = useState("");
+  const [allReportEdits, setAllReportEdits] = useState<
+    Record<string, { description: string; reporterName: string; targetName: string; category: string; status: string }>
+  >({});
+  const [savingAllReportId, setSavingAllReportId] = useState<string | null>(null);
+  const [deletingAllReportId, setDeletingAllReportId] = useState<string | null>(null);
+
+  const [pendingSearch, setPendingSearch] = useState("");
+  const [pendingBodyDrafts, setPendingBodyDrafts] = useState<
+    Record<string, { description: string; reporterName: string; targetName: string }>
+  >({});
+  const [savingPendingBodyId, setSavingPendingBodyId] = useState<string | null>(null);
+  const [deletingPendingId, setDeletingPendingId] = useState<string | null>(null);
+
+  const navigateTab = (tab: DashboardTab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "targets") params.delete("tab");
+    else params.set("tab", tab);
+    const qs = params.toString();
+    router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
+  };
+
+  const targetNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const t of targets) {
+      if (t.id) map[t.id] = String(t.name || t.id);
+    }
+    return map;
+  }, [targets]);
+
+  const filteredPendingReports = useMemo(() => {
+    const q = pendingSearch.trim().toLowerCase();
+    if (!q) return pendingReports;
+    return pendingReports.filter((r: any) => {
+      const hay = [r.targetName, r.reporterName, r.authorEmail, r.description, r.category]
+        .map((x) => String(x || "").toLowerCase())
+        .join(" ");
+      return hay.includes(q);
+    });
+  }, [pendingReports, pendingSearch]);
+
+  const filteredAllReports = useMemo(() => {
+    const q = allReportsSearch.trim().toLowerCase();
+    if (!q) return allSiteReports;
+    return allSiteReports.filter((r: any) => {
+      const pageName = targetNameById[String(r.targetId || "")] || r.targetName || "";
+      const hay = [r.id, r.targetName, pageName, r.reporterName, r.authorEmail, r.description, r.status, r.category]
+        .map((x) => String(x || "").toLowerCase())
+        .join(" ");
+      return hay.includes(q);
+    });
+  }, [allSiteReports, allReportsSearch, targetNameById]);
   const cleanPhones = useMemo(() => phones.map((phone) => phone.trim()).filter(Boolean), [phones]);
   const cleanLinks = useMemo(
     () => links.map((link) => ({ ...link, url: link.url.trim() })).filter((link) => link.url),
@@ -154,7 +243,6 @@ export default function DashboardPage() {
     [name, cleanPhones, cleanLinks, cleanIdentityTags]
   );
   const isEditing = Boolean(targetId);
-  const fuzzyThreshold = 0.84;
   const sharedPhoneClusters = useMemo(() => findSharedPhoneClusters(targets), [targets]);
   const filteredTargets = useMemo(() => {
     const query = targetSearch.trim().toLowerCase();
@@ -178,7 +266,7 @@ export default function DashboardPage() {
   }, [targets, targetSearch, targetCategoryFilter]);
 
   const pendingMatchMap = useMemo(() => {
-    const map: Record<string, { target?: TargetRecord; score: number; reason?: MatchReason }> = {};
+    const map: Record<string, TargetMatchResult> = {};
     for (const report of pendingReports) {
       map[report.id] = detectExistingTargetMatch(report, targets);
     }
@@ -264,6 +352,15 @@ export default function DashboardPage() {
         };
       }
       setReportAdminDrafts(drafts);
+      const bodyDrafts: Record<string, { description: string; reporterName: string; targetName: string }> = {};
+      for (const report of data) {
+        bodyDrafts[report.id] = {
+          description: String(report.description || ""),
+          reporterName: String(report.reporterName || ""),
+          targetName: String(report.targetName || ""),
+        };
+      }
+      setPendingBodyDrafts(bodyDrafts);
     } catch (error) {
       console.error(error);
     } finally {
@@ -313,7 +410,9 @@ export default function DashboardPage() {
         return;
       }
       applyTarget(snap.id, snap.data() as TargetRecord);
-      router.push(`/dashboard?edit=${snap.id}`);
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("edit", snap.id);
+      router.push(`/dashboard?${next.toString()}`);
     } catch (error) {
       console.error(error);
       setErrorMsg(lang === "ar" ? "حصل خطأ أثناء تحميل بيانات الـ target." : "Failed to load target data.");
@@ -337,6 +436,178 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, targetId]);
 
+  const fetchVisitorData = async () => {
+    setVisitorLogsLoading(true);
+    try {
+      const logsSnap = await getDocs(query(collection(db, "visitorLogs"), orderBy("createdAt", "desc"), limit(400)));
+      setVisitorLogs(logsSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      const blockedSnap = await getDocs(collection(db, "blockedIps"));
+      const blocked = blockedSnap.docs
+        .map((item) => ({ id: item.id, ...(item.data() as Record<string, unknown>) } as { id: string; ip?: string; createdAt?: number }))
+        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+      setBlockedIpRows(blocked as { id: string; ip?: string; createdAt?: number }[]);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setVisitorLogsLoading(false);
+    }
+  };
+
+  const fetchAllSiteReports = async () => {
+    setAllReportsLoading(true);
+    try {
+      const snapshot = await getDocs(query(collection(db, "reports"), limit(800)));
+      const data: any[] = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      data.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+      setAllSiteReports(data);
+      const edits: Record<string, { description: string; reporterName: string; targetName: string; category: string; status: string }> = {};
+      for (const report of data) {
+        edits[report.id] = {
+          description: String(report.description || ""),
+          reporterName: String(report.reporterName || ""),
+          targetName: String(report.targetName || ""),
+          category: String(report.category || "scam"),
+          status: String(report.status || "pending"),
+        };
+      }
+      setAllReportEdits(edits);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setAllReportsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (activeTab === "visitors") void fetchVisitorData();
+    if (activeTab === "all-reports") void fetchAllSiteReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, activeTab]);
+
+  const savePendingReportBody = async (reportId: string) => {
+    const draft = pendingBodyDrafts[reportId];
+    if (!draft) return;
+    setSavingPendingBodyId(reportId);
+    setErrorMsg("");
+    try {
+      await updateDoc(doc(db, "reports", reportId), {
+        description: draft.description.trim(),
+        reporterName: draft.reporterName.trim(),
+        targetName: draft.targetName.trim(),
+        updatedAt: Date.now(),
+      });
+      setSuccessMsg(lang === "ar" ? "تم حفظ تعديلات البلاغ." : "Report edits saved.");
+      await fetchPendingReports();
+    } catch (error) {
+      console.error(error);
+      setErrorMsg(lang === "ar" ? "تعذر حفظ تعديلات البلاغ." : "Failed to save report edits.");
+    } finally {
+      setSavingPendingBodyId(null);
+    }
+  };
+
+  const deletePendingReportDoc = async (reportId: string) => {
+    const ok = window.confirm(lang === "ar" ? "حذف هذا البلاغ نهائياً؟" : "Permanently delete this report?");
+    if (!ok) return;
+    setDeletingPendingId(reportId);
+    setErrorMsg("");
+    try {
+      await deleteDoc(doc(db, "reports", reportId));
+      setSuccessMsg(lang === "ar" ? "تم حذف البلاغ." : "Report deleted.");
+      await fetchPendingReports();
+    } catch (error) {
+      console.error(error);
+      setErrorMsg(lang === "ar" ? "تعذر حذف البلاغ." : "Failed to delete report.");
+    } finally {
+      setDeletingPendingId(null);
+    }
+  };
+
+  const saveAllReportRow = async (reportId: string) => {
+    const draft = allReportEdits[reportId];
+    if (!draft) return;
+    setSavingAllReportId(reportId);
+    setErrorMsg("");
+    try {
+      await updateDoc(doc(db, "reports", reportId), {
+        description: draft.description.trim(),
+        reporterName: draft.reporterName.trim(),
+        targetName: draft.targetName.trim(),
+        category: draft.category,
+        status: draft.status,
+        updatedAt: Date.now(),
+      });
+      setSuccessMsg(lang === "ar" ? "تم حفظ البلاغ." : "Report saved.");
+      await fetchAllSiteReports();
+      if (targetId) await fetchApprovedReportsForTarget(targetId);
+      await fetchPendingReports();
+    } catch (error) {
+      console.error(error);
+      setErrorMsg(lang === "ar" ? "تعذر حفظ البلاغ." : "Failed to save report.");
+    } finally {
+      setSavingAllReportId(null);
+    }
+  };
+
+  const deleteAllReportRow = async (reportId: string) => {
+    const ok = window.confirm(lang === "ar" ? "حذف هذا البلاغ نهائياً؟" : "Permanently delete this report?");
+    if (!ok) return;
+    setDeletingAllReportId(reportId);
+    setErrorMsg("");
+    try {
+      await deleteDoc(doc(db, "reports", reportId));
+      setSuccessMsg(lang === "ar" ? "تم حذف البلاغ." : "Report deleted.");
+      await fetchAllSiteReports();
+      if (targetId) await fetchApprovedReportsForTarget(targetId);
+      await fetchPendingReports();
+    } catch (error) {
+      console.error(error);
+      setErrorMsg(lang === "ar" ? "تعذر حذف البلاغ." : "Failed to delete report.");
+    } finally {
+      setDeletingAllReportId(null);
+    }
+  };
+
+  const blockVisitorIp = async (ip: string) => {
+    const trimmed = ip.trim();
+    if (!trimmed) {
+      setErrorMsg(lang === "ar" ? "لا يوجد IP صالح لهذا الصف." : "No valid IP for this entry.");
+      return;
+    }
+    const docId = clientIpToBlockedDocId(trimmed);
+    setBlockingIpBusy(trimmed);
+    setErrorMsg("");
+    try {
+      await setDoc(doc(db, "blockedIps", docId), {
+        ip: trimmed,
+        createdAt: Date.now(),
+      });
+      setSuccessMsg(lang === "ar" ? "تم حظر عنوان الـ IP." : "IP address blocked.");
+      await fetchVisitorData();
+    } catch (error) {
+      console.error(error);
+      setErrorMsg(lang === "ar" ? "تعذر حظر الـ IP." : "Failed to block IP.");
+    } finally {
+      setBlockingIpBusy(null);
+    }
+  };
+
+  const unblockVisitorIp = async (rowId: string) => {
+    setBlockingIpBusy(rowId);
+    setErrorMsg("");
+    try {
+      await deleteDoc(doc(db, "blockedIps", rowId));
+      setSuccessMsg(lang === "ar" ? "تم إلغاء حظر الـ IP." : "IP unblocked.");
+      await fetchVisitorData();
+    } catch (error) {
+      console.error(error);
+      setErrorMsg(lang === "ar" ? "تعذر إلغاء الحظر." : "Failed to unblock IP.");
+    } finally {
+      setBlockingIpBusy(null);
+    }
+  };
+
   const approveReport = async (report: any) => {
     try {
       setErrorMsg("");
@@ -354,10 +625,7 @@ export default function DashboardPage() {
             );
 
       const bestMatch = detectExistingTargetMatch(report, candidatePool);
-      const resolvedExisting =
-        bestMatch.reason === "phone" || bestMatch.reason === "link" || bestMatch.score >= fuzzyThreshold
-          ? bestMatch.target
-          : undefined;
+      const resolvedExisting = isAuthoritativeTargetMatch(bestMatch) ? bestMatch.target : undefined;
       const targetId = resolvedExisting?.id || `target_${Date.now()}`;
       const baseData = resolvedExisting;
 
@@ -518,10 +786,7 @@ export default function DashboardPage() {
         targetLink: manualTargetLink.trim(),
       };
       const bestMatch = detectExistingTargetMatch(reportPayload, targets);
-      const baseData =
-        bestMatch.reason === "phone" || bestMatch.reason === "link" || bestMatch.score >= fuzzyThreshold
-          ? bestMatch.target
-          : undefined;
+      const baseData = isAuthoritativeTargetMatch(bestMatch) ? bestMatch.target : undefined;
       const resolvedTargetId = baseData?.id || `target_${Date.now()}`;
       const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
       const nextTargetPayload = targetPayload({
@@ -846,7 +1111,9 @@ export default function DashboardPage() {
       setTargetId(id);
       setCreatedAt(payload.createdAt);
       setSuccessMsg(isEditing ? (lang === "ar" ? "تم تعديل بيانات الصفحة بنجاح." : "Target updated successfully.") : (lang === "ar" ? "تمت إضافة الصفحة بنجاح." : "Target created successfully."));
-      router.push(`/dashboard?edit=${id}`);
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("edit", id);
+      router.push(`/dashboard?${next.toString()}`);
       await fetchTargets();
     } catch (error) {
       console.error(error);
@@ -870,7 +1137,10 @@ export default function DashboardPage() {
           {isAdmin && (
             <button
               type="button"
-              onClick={resetForm}
+              onClick={() => {
+                resetForm();
+                navigateTab("targets");
+              }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 text-sm font-bold hover:bg-secondary/70"
             >
               <Plus className="w-4 h-4" />
@@ -887,7 +1157,48 @@ export default function DashboardPage() {
         ) : !user || !isAdmin ? (
           <UnauthorizedNotFound />
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <nav
+              className="glass-panel rounded-3xl p-3 lg:w-52 xl:w-56 shrink-0 lg:sticky lg:top-28 space-y-1"
+              aria-label={lang === "ar" ? "أقسام اللوحة" : "Dashboard sections"}
+            >
+              {(
+                [
+                  { id: "targets" as const, ar: "الصفحات والأهداف", en: "Pages & targets", icon: LayoutDashboard },
+                  { id: "pending" as const, ar: "بلاغات معلّقة وفلترة", en: "Pending & filters", icon: ListChecks },
+                  { id: "visitors" as const, ar: "زوار الموقع", en: "Site visitors", icon: Users },
+                  { id: "all-reports" as const, ar: "كل البلاغات", en: "All reports", icon: AlertCircle },
+                ] as const
+              ).map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigateTab(item.id)}
+                    className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-start text-sm font-bold transition ${
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm dark:bg-neon-blue dark:text-black"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 opacity-90" />
+                    <span className="leading-snug">{lang === "ar" ? item.ar : item.en}</span>
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="min-w-0 flex-1 space-y-6">
+              {(errorMsg || successMsg) && (
+                <div className="space-y-2">
+                  {errorMsg ? <AlertBox tone="danger" text={errorMsg} /> : null}
+                  {successMsg ? <AlertBox tone="success" text={successMsg} /> : null}
+                </div>
+              )}
+              {activeTab === "targets" && (
+                <>
+                  <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
             <form onSubmit={handleSubmit} className="glass-panel rounded-3xl p-5 md:p-8 space-y-6">
               <div className="flex flex-col gap-3 border-b border-border pb-5 md:flex-row md:items-center md:justify-between">
                 <div>
@@ -916,9 +1227,6 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-
-              {errorMsg && <AlertBox tone="danger" text={errorMsg} />}
-              {successMsg && <AlertBox tone="success" text={successMsg} />}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Field label={lang === "ar" ? "الاسم *" : "Name *"}>
@@ -1270,10 +1578,8 @@ export default function DashboardPage() {
               </div>
             </aside>
           </div>
-        )}
 
-        {isAdmin && (
-          <section className="mt-8 glass-panel rounded-3xl p-5 md:p-8">
+          <section className="glass-panel rounded-3xl p-5 md:p-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-black">
                 {lang === "ar" ? "التعليق المثبت والتوثيق (بلاغات موثقة)" : "Pinned note & verification (verified reports)"}
@@ -1361,10 +1667,8 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
-        )}
 
-        {isAdmin && (
-          <section className="mt-8 glass-panel rounded-3xl p-5 md:p-8">
+          <section className="glass-panel rounded-3xl p-5 md:p-8">
             <h2 className="text-2xl font-black mb-4">
               {lang === "ar" ? "إضافة بلاغ يدوي (نيابة عن عميل)" : "Add manual report (on behalf of customer)"}
             </h2>
@@ -1422,198 +1726,8 @@ export default function DashboardPage() {
               </button>
             </form>
           </section>
-        )}
 
-        {isAdmin && (
-          <section className="mt-8 glass-panel rounded-3xl p-5 md:p-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-black">{lang === "ar" ? "بلاغات بانتظار المراجعة" : "Pending reports for review"}</h2>
-              {reportsLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            </div>
-            <div className="space-y-3">
-              {pendingReports.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد بلاغات معلقة حاليًا." : "No pending reports right now."}</p>
-              ) : (
-                pendingReports.map((report) => (
-                  <div key={report.id} className="rounded-2xl border border-border p-5 bg-background/60 space-y-4">
-                    {(() => {
-                      const match = pendingMatchMap[report.id];
-                      const willMerge =
-                        !!match?.target &&
-                        (match.reason === "phone" || match.reason === "link" || (match.score ?? 0) >= fuzzyThreshold);
-                      if (!willMerge) return null;
-                      const percent = Math.round((match.score ?? 0) * 100);
-                      const reasonLabel =
-                        match.reason === "phone"
-                          ? (lang === "ar" ? "مطابقة رقم الهاتف" : "Phone match")
-                          : match.reason === "link"
-                            ? (lang === "ar" ? "مطابقة رابط الصفحة" : "Link match")
-                            : (lang === "ar" ? "مطابقة اسم مشابه" : "Fuzzy name match");
-                      return (
-                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs">
-                          <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                            {lang === "ar" ? "سيتم الدمج مع هدف موجود" : "Will merge with existing target"}:
-                          </span>{" "}
-                          <span className="font-semibold">{match.target?.name || "-"}</span>
-                          <span className="text-muted-foreground">
-                            {" "}
-                            ({reasonLabel} - {percent}%)
-                          </span>
-                        </div>
-                      );
-                    })()}
-
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="space-y-3 min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-bold">
-                            {lang === "ar" ? "بلاغ جديد" : "Pending report"}
-                          </span>
-                          <span className="inline-flex items-center rounded-full bg-background border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                            {report.category || "-"}
-                          </span>
-                          <span className="text-xs text-muted-foreground" dir="ltr">
-                            #{report.id}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div className="rounded-xl border border-border bg-background/70 p-3">
-                            <p className="text-[11px] font-bold uppercase text-muted-foreground mb-1">
-                              {lang === "ar" ? "اسم الهدف" : "Target name"}
-                            </p>
-                            <p className="font-semibold break-words">{report.targetName || "-"}</p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-background/70 p-3">
-                            <p className="text-[11px] font-bold uppercase text-muted-foreground mb-1">
-                              {lang === "ar" ? "مقدم البلاغ" : "Reporter"}
-                            </p>
-                            <p className="font-semibold break-words">{report.authorEmail || report.authorId || "-"}</p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-background/70 p-3">
-                            <p className="text-[11px] font-bold uppercase text-muted-foreground mb-1">
-                              {lang === "ar" ? "رقم الهاتف" : "Phone"}
-                            </p>
-                            <p className="font-semibold break-words" dir="ltr">{report.targetPhone || "-"}</p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-background/70 p-3">
-                            <p className="text-[11px] font-bold uppercase text-muted-foreground mb-1">
-                              {lang === "ar" ? "رابط الصفحة" : "Page link"}
-                            </p>
-                            {report.targetLink ? (
-                              <a href={report.targetLink} target="_blank" rel="noreferrer" className="font-semibold text-primary underline break-all" dir="ltr">
-                                {report.targetLink}
-                              </a>
-                            ) : (
-                              <p className="font-semibold">-</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-xl border border-border bg-background/70 p-3">
-                          <p className="text-[11px] font-bold uppercase text-muted-foreground mb-2">
-                            {lang === "ar" ? "وصف البلاغ (كامل)" : "Full report description"}
-                          </p>
-                          <p className="text-sm leading-7 whitespace-pre-wrap break-words">{report.description || "-"}</p>
-                        </div>
-
-                        {Array.isArray(report.evidenceImages) && report.evidenceImages.length > 0 && (
-                          <div className="rounded-xl border border-border bg-background/70 p-3">
-                            <p className="text-[11px] font-bold uppercase text-muted-foreground mb-2">
-                              {lang === "ar" ? "الأدلة المرفقة" : "Attached evidence"}
-                            </p>
-                            <div className="flex gap-2 overflow-x-auto pb-1">
-                              {report.evidenceImages.map((img: string, idx: number) => (
-                                <a key={`${report.id}-img-${idx}`} href={img} target="_blank" rel="noreferrer" className="block shrink-0">
-                                  <img src={img} alt="Evidence" className="w-20 h-20 rounded-lg object-cover border border-border" />
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="rounded-xl border border-border bg-background/70 p-3 space-y-3">
-                          <p className="text-[11px] font-bold uppercase text-muted-foreground">
-                            {lang === "ar" ? "خيارات عرض البلاغ" : "Report display options"}
-                          </p>
-                          <textarea
-                            value={reportAdminDrafts[report.id]?.adminComment || ""}
-                            onChange={(e) =>
-                              setReportAdminDrafts((prev) => ({
-                                ...prev,
-                                [report.id]: {
-                                  adminComment: e.target.value,
-                                  adminVerified: prev[report.id]?.adminVerified ?? false,
-                                  adminPinned: prev[report.id]?.adminPinned ?? false,
-                                },
-                              }))
-                            }
-                            className="input min-h-[90px]"
-                            placeholder={lang === "ar" ? "تعليق الأدمن الذي سيظهر أعلى البلاغ..." : "Admin comment shown above this report..."}
-                          />
-                          <div className="flex flex-wrap gap-3 text-xs">
-                            <label className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 bg-background cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={reportAdminDrafts[report.id]?.adminVerified || false}
-                                onChange={(e) =>
-                                  setReportAdminDrafts((prev) => ({
-                                    ...prev,
-                                    [report.id]: {
-                                      adminComment: prev[report.id]?.adminComment ?? "",
-                                      adminVerified: e.target.checked,
-                                      adminPinned: prev[report.id]?.adminPinned ?? false,
-                                    },
-                                  }))
-                                }
-                              />
-                              <span>{lang === "ar" ? "إضافة علامة التوثيق" : "Show verification badge"}</span>
-                            </label>
-                            <label className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 bg-background cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={reportAdminDrafts[report.id]?.adminPinned || false}
-                                onChange={(e) =>
-                                  setReportAdminDrafts((prev) => ({
-                                    ...prev,
-                                    [report.id]: {
-                                      adminComment: prev[report.id]?.adminComment ?? "",
-                                      adminVerified: prev[report.id]?.adminVerified ?? false,
-                                      adminPinned: e.target.checked,
-                                    },
-                                  }))
-                                }
-                              />
-                              <span>{lang === "ar" ? "تثبيت هذا البلاغ أولاً" : "Pin this report first"}</span>
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2 md:min-w-[120px]">
-                        <p className="text-xs text-muted-foreground">
-                          {lang === "ar" ? "تاريخ الإرسال" : "Submitted"}:{" "}
-                          <span className="font-semibold">
-                            {report.createdAt ? new Date(report.createdAt).toLocaleString(lang === "ar" ? "ar-EG" : "en-US") : "-"}
-                          </span>
-                        </p>
-                        <button type="button" onClick={() => void approveReport(report)} className="px-3 py-1.5 rounded-lg bg-green-500 text-white text-xs font-bold hover:bg-green-600">
-                          {lang === "ar" ? "اعتماد" : "Approve"}
-                        </button>
-                        <button type="button" onClick={() => void rejectReport(report)} className="px-3 py-1.5 rounded-lg bg-destructive text-white text-xs font-bold hover:opacity-90">
-                          {lang === "ar" ? "رفض" : "Reject"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        )}
-
-        {isAdmin && (
-          <section className="mt-8 glass-panel rounded-3xl p-5 md:p-8 space-y-6">
+          <section className="glass-panel rounded-3xl p-5 md:p-8 space-y-6">
             <div>
               <h2 className="text-2xl font-black">{lang === "ar" ? "سلامة البيانات والدمج" : "Data integrity & merge"}</h2>
               <p className="text-sm text-muted-foreground mt-1">
@@ -1701,6 +1815,474 @@ export default function DashboardPage() {
               )}
             </div>
           </section>
+                </>
+              )}
+
+              {activeTab === "pending" && (
+                <section className="glass-panel rounded-3xl p-5 md:p-8">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-black">{lang === "ar" ? "بلاغات معلّقة وفلترة" : "Pending reports & filters"}</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {lang === "ar" ? "ابحث في الأسماء والنصوص المكتوبة في البلاغ." : "Search reporter names, target names, and report text."}
+                      </p>
+                    </div>
+                    {reportsLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                  </div>
+                  <input
+                    value={pendingSearch}
+                    onChange={(e) => setPendingSearch(e.target.value)}
+                    className="input mb-4 max-w-2xl"
+                    placeholder={lang === "ar" ? "بحث في الهدف، المُبلّغ، الإيميل، الوصف..." : "Filter by target, reporter, email, description..."}
+                  />
+                  <div className="space-y-3">
+                    {pendingReports.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد بلاغات معلقة حاليًا." : "No pending reports right now."}</p>
+                    ) : filteredPendingReports.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا نتائج مطابقة للبحث." : "No matches for this search."}</p>
+                    ) : (
+                      filteredPendingReports.map((report) => (
+                        <div key={report.id} className="rounded-2xl border border-border bg-background/60 p-5 space-y-4">
+                          {(() => {
+                            const match = pendingMatchMap[report.id];
+                            const willMerge = isAuthoritativeTargetMatch(match);
+                            const fuzzyHint = match?.nameFuzzyBest;
+                            if (!willMerge && !fuzzyHint) return null;
+
+                            return (
+                              <div className="space-y-2">
+                                {willMerge ? (
+                                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs">
+                                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                                      {lang === "ar"
+                                        ? "سيتم الدمج مع هدف موجود عند الموافقة:"
+                                        : "Approval will attach to existing target:"}
+                                    </span>{" "}
+                                    <span className="font-semibold">{match.target?.name || "-"}</span>
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      (
+                                      {match.reason === "phone"
+                                        ? lang === "ar"
+                                          ? "مطابقة رقم الهاتف"
+                                          : "Phone match"
+                                        : match.reason === "link"
+                                          ? lang === "ar"
+                                            ? "مطابقة رابط الصفحة"
+                                            : "Link match"
+                                          : lang === "ar"
+                                            ? "مطابقة اسم تامّة أو بديل مسجّل"
+                                            : "Exact name match (or saved alias)"}
+                                      )
+                                    </span>
+                                  </div>
+                                ) : null}
+                                {!willMerge && fuzzyHint ? (
+                                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+                                    <span className="font-bold text-amber-800 dark:text-amber-300">
+                                      {lang === "ar" ? "تشابه اسم فقط (لن يُربط تلقائيًا)" : "Similar name only (not auto-linked)"}:
+                                    </span>{" "}
+                                    <span className="font-semibold">{fuzzyHint.target.name || "-"}</span>
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      (~{Math.round(fuzzyHint.score * 100)}%)
+                                      {lang === "ar"
+                                        ? " — لو نفس المتجر عدّل اسم البلاغ ليطابق الاسم المعروض، أو أكّد برقم\/رابط واحد قبل الاعتماد."
+                                        : " — If it’s the same business, edit the report name to match exactly, or link a matching phone/URL before approving."}
+                                    </span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })()}
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0 flex-1 space-y-3">
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className="rounded-full bg-secondary px-2.5 py-1 font-bold">{lang === "ar" ? "معلّق" : "Pending"}</span>
+                                <span className="rounded-full border border-border px-2.5 py-1 text-muted-foreground">{report.category || "-"}</span>
+                                <span className="text-muted-foreground" dir="ltr">#{report.id}</span>
+                              </div>
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <Field label={lang === "ar" ? "اسم الهدف (تعديل)" : "Target name (edit)"}>
+                                  <input
+                                    value={pendingBodyDrafts[report.id]?.targetName ?? ""}
+                                    onChange={(e) =>
+                                      setPendingBodyDrafts((prev) => ({
+                                        ...prev,
+                                        [report.id]: {
+                                          description: prev[report.id]?.description ?? "",
+                                          reporterName: prev[report.id]?.reporterName ?? "",
+                                          targetName: e.target.value,
+                                        },
+                                      }))
+                                    }
+                                    className="input"
+                                  />
+                                </Field>
+                                <Field label={lang === "ar" ? "اسم المُبلّغ (تعديل)" : "Reporter name (edit)"}>
+                                  <input
+                                    value={pendingBodyDrafts[report.id]?.reporterName ?? ""}
+                                    onChange={(e) =>
+                                      setPendingBodyDrafts((prev) => ({
+                                        ...prev,
+                                        [report.id]: {
+                                          description: prev[report.id]?.description ?? "",
+                                          reporterName: e.target.value,
+                                          targetName: prev[report.id]?.targetName ?? "",
+                                        },
+                                      }))
+                                    }
+                                    className="input"
+                                  />
+                                </Field>
+                              </div>
+                              <Field label={lang === "ar" ? "وصف البلاغ (تعديل)" : "Description (edit)"}>
+                                <textarea
+                                  value={pendingBodyDrafts[report.id]?.description ?? ""}
+                                  onChange={(e) =>
+                                    setPendingBodyDrafts((prev) => ({
+                                      ...prev,
+                                      [report.id]: {
+                                        description: e.target.value,
+                                        reporterName: prev[report.id]?.reporterName ?? "",
+                                        targetName: prev[report.id]?.targetName ?? "",
+                                      },
+                                    }))
+                                  }
+                                  className="input min-h-[100px]"
+                                />
+                              </Field>
+                              <div className="rounded-xl border border-border bg-background/70 p-3 text-xs space-y-1">
+                                <p className="font-bold text-muted-foreground">{lang === "ar" ? "حساب المُبلّغ" : "Submitter account"}</p>
+                                <p className="break-all" dir="ltr">{report.authorEmail || report.authorId || "â€”"}</p>
+                                <p className="mt-2 font-bold text-muted-foreground">{lang === "ar" ? "رقم مذكور" : "Phone on report"}</p>
+                                <p dir="ltr">{report.targetPhone || "â€”"}</p>
+                                {report.targetLink ? (
+                                  <a href={report.targetLink} target="_blank" rel="noreferrer" className="mt-1 block break-all text-primary underline" dir="ltr">
+                                    {report.targetLink}
+                                  </a>
+                                ) : null}
+                              </div>
+                              {Array.isArray(report.evidenceImages) && report.evidenceImages.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {report.evidenceImages.map((img: string, idx: number) => (
+                                    <a key={`${report.id}-ev-${idx}`} href={img} target="_blank" rel="noreferrer">
+                                      <img src={img} alt="" className="h-16 w-16 rounded-lg border object-cover" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="rounded-xl border border-border bg-background/70 p-3 space-y-2">
+                                <p className="text-[11px] font-bold uppercase text-muted-foreground">{lang === "ar" ? "خيارات العرض" : "Display options"}</p>
+                                <textarea
+                                  value={reportAdminDrafts[report.id]?.adminComment || ""}
+                                  onChange={(e) =>
+                                    setReportAdminDrafts((prev) => ({
+                                      ...prev,
+                                      [report.id]: {
+                                        adminComment: e.target.value,
+                                        adminVerified: prev[report.id]?.adminVerified ?? false,
+                                        adminPinned: prev[report.id]?.adminPinned ?? false,
+                                      },
+                                    }))
+                                  }
+                                  className="input min-h-[72px]"
+                                  placeholder={lang === "ar" ? "تعليق الأدمن..." : "Admin comment..."}
+                                />
+                                <div className="flex flex-wrap gap-3 text-xs">
+                                  <label className="inline-flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={reportAdminDrafts[report.id]?.adminVerified || false}
+                                      onChange={(e) =>
+                                        setReportAdminDrafts((prev) => ({
+                                          ...prev,
+                                          [report.id]: {
+                                            adminComment: prev[report.id]?.adminComment ?? "",
+                                            adminVerified: e.target.checked,
+                                            adminPinned: prev[report.id]?.adminPinned ?? false,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <span>{lang === "ar" ? "توثيق" : "Verified"}</span>
+                                  </label>
+                                  <label className="inline-flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={reportAdminDrafts[report.id]?.adminPinned || false}
+                                      onChange={(e) =>
+                                        setReportAdminDrafts((prev) => ({
+                                          ...prev,
+                                          [report.id]: {
+                                            adminComment: prev[report.id]?.adminComment ?? "",
+                                            adminVerified: prev[report.id]?.adminVerified ?? false,
+                                            adminPinned: e.target.checked,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <span>{lang === "ar" ? "تثبيت" : "Pin"}</span>
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 flex-col gap-2 lg:w-40">
+                              <p className="text-xs text-muted-foreground">
+                                {report.createdAt ? new Date(report.createdAt).toLocaleString(lang === "ar" ? "ar-EG" : "en-US") : "â€”"}
+                              </p>
+                              <button
+                                type="button"
+                                disabled={savingPendingBodyId === report.id}
+                                onClick={() => void savePendingReportBody(report.id)}
+                                className="rounded-lg border border-border bg-secondary px-3 py-2 text-xs font-bold hover:bg-secondary/80 disabled:opacity-60"
+                              >
+                                {savingPendingBodyId === report.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 inline" />}{" "}
+                                {lang === "ar" ? "حفظ التعديلات" : "Save edits"}
+                              </button>
+                              <button type="button" onClick={() => void approveReport(report)} className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700">
+                                {lang === "ar" ? "اعتماد" : "Approve"}
+                              </button>
+                              <button type="button" onClick={() => void rejectReport(report)} className="rounded-lg bg-destructive px-3 py-2 text-xs font-bold text-white hover:opacity-90">
+                                {lang === "ar" ? "رفض" : "Reject"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingPendingId === report.id}
+                                onClick={() => void deletePendingReportDoc(report.id)}
+                                className="rounded-lg border border-destructive/40 px-3 py-2 text-xs font-bold text-destructive hover:bg-destructive/10 disabled:opacity-60"
+                              >
+                                {deletingPendingId === report.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 inline" />}{" "}
+                                {lang === "ar" ? "حذف" : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {activeTab === "visitors" && (
+                <div className="space-y-6">
+                  <section className="glass-panel rounded-3xl p-5 md:p-8">
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <h2 className="text-2xl font-black">{lang === "ar" ? "زوار الموقع" : "Site visitors"}</h2>
+                        <p className="text-sm text-muted-foreground">{lang === "ar" ? "آخر الطلبات المسجّلة (مسار، IP، إيميل الدخول إن وُجد)." : "Recent requests with path, IP, and login email when available."}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={visitorLogsLoading}
+                        onClick={() => void fetchVisitorData()}
+                        className="rounded-xl bg-secondary px-4 py-2 text-sm font-bold hover:bg-secondary/70 disabled:opacity-60"
+                      >
+                        {visitorLogsLoading ? <Loader2 className="h-4 w-4 animate-spin inline" /> : null}{" "}
+                        {lang === "ar" ? "تحديث" : "Refresh"}
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto rounded-xl border border-border">
+                      <table className="w-full min-w-[720px] text-left text-sm">
+                        <thead className="border-b border-border bg-secondary/40 text-xs font-black uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2">{lang === "ar" ? "الوقت" : "Time"}</th>
+                            <th className="px-3 py-2">IP</th>
+                            <th className="px-3 py-2">{lang === "ar" ? "المسار" : "Path"}</th>
+                            <th className="px-3 py-2">{lang === "ar" ? "الإيميل" : "Email"}</th>
+                            <th className="px-3 py-2">{lang === "ar" ? "إجراء" : "Action"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visitorLogs.map((row) => (
+                            <tr key={row.id} className="border-b border-border/60">
+                              <td className="px-3 py-2 whitespace-nowrap text-xs">
+                                {row.createdAt ? new Date(row.createdAt).toLocaleString(lang === "ar" ? "ar-EG" : "en-US") : "â€”"}
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs" dir="ltr">{row.clientIp || "â€”"}</td>
+                              <td className="px-3 py-2 text-xs break-all" dir="ltr">{row.path || "â€”"}</td>
+                              <td className="px-3 py-2 text-xs break-all" dir="ltr">{row.email || row.userId || "â€”"}</td>
+                              <td className="px-3 py-2">
+                                {row.clientIp ? (
+                                  <button
+                                    type="button"
+                                    disabled={blockingIpBusy === row.clientIp}
+                                    onClick={() => void blockVisitorIp(String(row.clientIp))}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-destructive/40 px-2 py-1 text-[11px] font-bold text-destructive hover:bg-destructive/10 disabled:opacity-60"
+                                  >
+                                    <ShieldBan className="h-3.5 w-3.5" />
+                                    {lang === "ar" ? "حظر IP" : "Block IP"}
+                                  </button>
+                                ) : (
+                                  "â€”"
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {visitorLogs.length === 0 && !visitorLogsLoading && (
+                        <p className="p-6 text-sm text-muted-foreground">{lang === "ar" ? "لا توجد سجلات بعد." : "No visit logs yet."}</p>
+                      )}
+                    </div>
+                  </section>
+                  <section className="glass-panel rounded-3xl p-5 md:p-8">
+                    <h3 className="text-lg font-black mb-3">{lang === "ar" ? "عناوين IP المحظورة" : "Blocked IP addresses"}</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {blockedIpRows.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا يوجد حظر حالياً." : "No blocks yet."}</p>
+                      ) : (
+                        blockedIpRows.map((row) => (
+                          <div key={row.id} className="flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1 text-xs">
+                            <span className="font-mono" dir="ltr">{row.ip || row.id}</span>
+                            <button
+                              type="button"
+                              disabled={blockingIpBusy === row.id}
+                              onClick={() => void unblockVisitorIp(row.id)}
+                              className="font-bold text-destructive hover:underline disabled:opacity-60"
+                            >
+                              {lang === "ar" ? "إلغاء" : "Unblock"}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {activeTab === "all-reports" && (
+                <section className="glass-panel rounded-3xl p-5 md:p-8">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-black">{lang === "ar" ? "كل البلاغات في الموقع" : "All site reports"}</h2>
+                      <p className="text-sm text-muted-foreground">{lang === "ar" ? "تعديل الحالة أو النصوص، أو الحذف." : "Edit status or text, or delete."}</p>
+                    </div>
+                    {allReportsLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                  </div>
+                  <input
+                    value={allReportsSearch}
+                    onChange={(e) => setAllReportsSearch(e.target.value)}
+                    className="input mb-4 max-w-2xl"
+                    placeholder={lang === "ar" ? "بحث: صفحة، مُبلّغ، حالة..." : "Search page, reporter, status..."}
+                  />
+                  <div className="space-y-4">
+                    {filteredAllReports.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا بلاغات." : "No reports."}</p>
+                    ) : (
+                      filteredAllReports.map((report) => {
+                        const pageLabel = targetNameById[String(report.targetId || "")] || report.targetName || "â€”";
+                        return (
+                          <div key={report.id} className="rounded-2xl border border-border bg-background/60 p-4 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                              <span className="font-mono text-muted-foreground" dir="ltr">#{report.id}</span>
+                              <span className="rounded-full bg-secondary px-2 py-0.5 font-bold">{String(report.status || "")}</span>
+                            </div>
+                            <p className="text-sm font-bold">
+                              {lang === "ar" ? "الصفحة / الهدف: " : "Page / target: "}
+                              <span className="text-primary dark:text-neon-blue">{pageLabel}</span>
+                            </p>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <Field label={lang === "ar" ? "اسم الهدف في البلاغ" : "Target name on report"}>
+                                <input
+                                  value={allReportEdits[report.id]?.targetName ?? ""}
+                                  onChange={(e) =>
+                                    setAllReportEdits((prev) => ({
+                                      ...prev,
+                                      [report.id]: { ...(prev[report.id] || {} as any), targetName: e.target.value },
+                                    }))
+                                  }
+                                  className="input"
+                                />
+                              </Field>
+                              <Field label={lang === "ar" ? "اسم المُبلّغ" : "Reporter name"}>
+                                <input
+                                  value={allReportEdits[report.id]?.reporterName ?? ""}
+                                  onChange={(e) =>
+                                    setAllReportEdits((prev) => ({
+                                      ...prev,
+                                      [report.id]: { ...(prev[report.id] || {} as any), reporterName: e.target.value },
+                                    }))
+                                  }
+                                  className="input"
+                                />
+                              </Field>
+                              <Field label={lang === "ar" ? "التصنيف" : "Category"}>
+                                <select
+                                  value={allReportEdits[report.id]?.category ?? "scam"}
+                                  onChange={(e) =>
+                                    setAllReportEdits((prev) => ({
+                                      ...prev,
+                                      [report.id]: { ...(prev[report.id] || {} as any), category: e.target.value },
+                                    }))
+                                  }
+                                  className="input"
+                                >
+                                  <option value="scam">scam</option>
+                                  <option value="delay">delay</option>
+                                  <option value="bad_treatment">bad_treatment</option>
+                                  <option value="suspicious_untrusted">suspicious_untrusted</option>
+                                  <option value="successful_transaction">successful_transaction</option>
+                                </select>
+                              </Field>
+                              <Field label={lang === "ar" ? "الحالة" : "Status"}>
+                                <select
+                                  value={allReportEdits[report.id]?.status ?? "pending"}
+                                  onChange={(e) =>
+                                    setAllReportEdits((prev) => ({
+                                      ...prev,
+                                      [report.id]: { ...(prev[report.id] || {} as any), status: e.target.value },
+                                    }))
+                                  }
+                                  className="input"
+                                >
+                                  <option value="pending">pending</option>
+                                  <option value="approved">approved</option>
+                                  <option value="rejected">rejected</option>
+                                </select>
+                              </Field>
+                            </div>
+                            <Field label={lang === "ar" ? "الوصف" : "Description"}>
+                              <textarea
+                                value={allReportEdits[report.id]?.description ?? ""}
+                                onChange={(e) =>
+                                  setAllReportEdits((prev) => ({
+                                    ...prev,
+                                    [report.id]: { ...(prev[report.id] || {} as any), description: e.target.value },
+                                  }))
+                                }
+                                className="input min-h-[80px]"
+                              />
+                            </Field>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={savingAllReportId === report.id}
+                                onClick={() => void saveAllReportRow(report.id)}
+                                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-60"
+                              >
+                                {savingAllReportId === report.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                {lang === "ar" ? "حفظ" : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingAllReportId === report.id}
+                                onClick={() => void deleteAllReportRow(report.id)}
+                                className="inline-flex items-center gap-2 rounded-xl border border-destructive/40 px-4 py-2 text-xs font-bold text-destructive hover:bg-destructive/10 disabled:opacity-60"
+                              >
+                                {deletingAllReportId === report.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                {lang === "ar" ? "حذف" : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </>

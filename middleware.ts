@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import firebaseConfig from "./firebase-applet-config.json";
+import { clientIpToBlockedDocId } from "./lib/ip-block";
 
 const RESERVED_ROOT_ROUTES = new Set([
   "",
@@ -41,7 +43,33 @@ function resolveTargetRewrite(pathname: string) {
   return null;
 }
 
+function getClientIp(request: NextRequest) {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0]?.trim() ?? "";
+  return request.headers.get("x-real-ip")?.trim() ?? "";
+}
+
+async function isClientIpBlocked(ip: string) {
+  if (!ip) return false;
+  const docId = encodeURIComponent(clientIpToBlockedDocId(ip));
+  const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/blockedIps/${docId}?key=${firebaseConfig.apiKey}`;
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function middleware(request: NextRequest) {
+  const clientIp = getClientIp(request);
+  if (clientIp && (await isClientIpBlocked(clientIp))) {
+    return new NextResponse("Access denied.", {
+      status: 403,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
