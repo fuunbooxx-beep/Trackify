@@ -20,6 +20,7 @@ import {
   getTargetPhones,
   getTargetPreviousNames,
   getTargetReasons,
+  identityFieldsAfterReportSubmitted,
   normalizePhone,
   normalizeTargetName,
   normalizeUrl,
@@ -450,11 +451,12 @@ function ReportContent() {
         const existingDoc = linkedToExisting ? bestMatch.target : undefined;
         const baseData = existingDoc as TargetRecord | undefined;
         const resolvedTargetId = existingDoc?.id || `target_${Date.now()}`;
+        const idMerge = identityFieldsAfterReportSubmitted(baseData, targetName.trim());
 
         const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
         const mergedPayload = targetPayload({
-          name: targetName.trim(),
-          aliases: baseData ? getTargetKnownAliases(baseData) : [],
+          name: idMerge.name,
+          aliases: idMerge.aliases,
           previousNames: baseData ? getTargetPreviousNames(baseData) : [],
           linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
           type: String(baseData?.type || "page"),

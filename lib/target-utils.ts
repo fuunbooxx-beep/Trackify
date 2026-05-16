@@ -521,6 +521,34 @@ export function getTargetAliases(target: TargetRecord) {
   );
 }
 
+/** Keep canonical `target.name`; add reporter spelling variants as aliases instead of overwriting. */
+export function identityFieldsAfterReportSubmitted(existing: TargetRecord | undefined, submittedName: string) {
+  const submitted = String(submittedName || "").trim();
+  const stored = String(existing?.name || "").trim();
+
+  if (!existing || !stored) {
+    const name = submitted || stored;
+    const baseAliases = existing ? getTargetKnownAliases(existing) : [];
+    return { name, aliases: normalizeTargetAliases(baseAliases) };
+  }
+
+  let extraAliases: string[] = [];
+
+  if (submitted && normalizeTargetName(submitted) !== normalizeTargetName(stored)) {
+    const knownNorm = new Set(
+      [stored, ...getTargetAliases(existing)].map((s) => normalizeTargetName(String(s))).filter(Boolean)
+    );
+    if (!knownNorm.has(normalizeTargetName(submitted))) extraAliases.push(submitted);
+  }
+
+  const baseAliases = getTargetKnownAliases(existing);
+  const aliases = extraAliases.length
+    ? normalizeTargetAliases([...baseAliases, ...extraAliases])
+    : normalizeTargetAliases(baseAliases);
+
+  return { name: stored, aliases };
+}
+
 export function generateSearchTerms(name: string, phones: string[], links: TargetLink[], aliases: string[] = []) {
   const terms = new Set<string>();
   const names = [name, ...aliases];

@@ -60,6 +60,7 @@ import {
   getTargetLinks,
   getTargetPhones,
   getTargetReasons,
+  identityFieldsAfterReportSubmitted,
   hostFromUrl,
   platformLabel,
   TARGET_REASON_OPTIONS,
@@ -629,10 +630,12 @@ export default function DashboardPage() {
       const targetId = resolvedExisting?.id || `target_${Date.now()}`;
       const baseData = resolvedExisting;
 
+      const idMerge = identityFieldsAfterReportSubmitted(baseData, candidateName);
+
       const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
       const payload = targetPayload({
-        name: candidateName,
-        aliases: baseData ? getTargetKnownAliases(baseData) : [],
+        name: idMerge.name,
+        aliases: idMerge.aliases,
         previousNames: baseData ? getTargetPreviousNames(baseData) : [],
         linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
         type: String(report.targetType || baseData?.type || "page"),
@@ -788,10 +791,12 @@ export default function DashboardPage() {
       const bestMatch = detectExistingTargetMatch(reportPayload, targets);
       const baseData = isAuthoritativeTargetMatch(bestMatch) ? bestMatch.target : undefined;
       const resolvedTargetId = baseData?.id || `target_${Date.now()}`;
+      const idMerge = identityFieldsAfterReportSubmitted(baseData, manualTargetName.trim());
+
       const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
       const nextTargetPayload = targetPayload({
-        name: manualTargetName.trim(),
-        aliases: baseData ? getTargetKnownAliases(baseData) : [],
+        name: idMerge.name,
+        aliases: idMerge.aliases,
         previousNames: baseData ? getTargetPreviousNames(baseData) : [],
         linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
         type: String(baseData?.type || "page"),
