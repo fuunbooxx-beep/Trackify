@@ -49,13 +49,49 @@ function getClientIp(request: NextRequest) {
   return request.headers.get("x-real-ip")?.trim() ?? "";
 }
 
+const BLOCK_CACHE_TTL_MS = 5 * 60 * 1000;
+const FIRESTORE_LOOKUP_TIMEOUT_MS = 1_500;
+const SUPABASE_AUTH_TIMEOUT_MS = 2_500;
+const blockCache = new Map<string, { blocked: boolean; expires: number }>();
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { cache: "no-store", signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function isClientIpBlocked(ip: string) {
   if (!ip) return false;
+
+  const now = Date.now();
+  const cached = blockCache.get(ip);
+  if (cached && cached.expires > now) return cached.blocked;
+
   const docId = encodeURIComponent(clientIpToBlockedDocId(ip));
   const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/blockedIps/${docId}?key=${firebaseConfig.apiKey}`;
   try {
-    const res = await fetch(url, { cache: "no-store" });
-    return res.ok;
+    const res = await fetchWithTimeout(url, FIRESTORE_LOOKUP_TIMEOUT_MS);
+    const blocked = res.ok;
+    blockCache.set(ip, { blocked, expires: now + BLOCK_CACHE_TTL_MS });
+    return blocked;
   } catch {
     return false;
   }
@@ -63,16 +99,18 @@ async function isClientIpBlocked(ip: string) {
 
 export async function middleware(request: NextRequest) {
   const clientIp = getClientIp(request);
-  if (clientIp && (await isClientIpBlocked(clientIp))) {
-    return new NextResponse("Access denied.", {
-      status: 403,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
-  }
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  const blockedPromise = clientIp ? isClientIpBlocked(clientIp) : Promise.resolve(false);
+
   if (!url || !key) {
+    if (await blockedPromise) {
+      return new NextResponse("Access denied.", {
+        status: 403,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
     return NextResponse.next({ request });
   }
 
@@ -101,7 +139,17 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  const [blocked] = await Promise.all([
+    blockedPromise,
+    withTimeout(supabase.auth.getUser(), SUPABASE_AUTH_TIMEOUT_MS),
+  ]);
+
+  if (blocked) {
+    return new NextResponse("Access denied.", {
+      status: 403,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
 
   const rewritePath = resolveTargetRewrite(request.nextUrl.pathname);
   if (!rewritePath) return supabaseResponse;
