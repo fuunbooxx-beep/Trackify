@@ -708,6 +708,143 @@ html.dark.is-page-loading body::after {
   transform: scaleX(-1);
 }
 
+/* Home hero — gaming marketplace inspired, with Trackify's own identity. */
+.hero-game-wall {
+  position: absolute;
+  inset: -2rem -3rem auto;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  gap: 1.15rem;
+  transform: rotate(-1.5deg);
+}
+
+.hero-game-card {
+  position: relative;
+  display: flex;
+  min-height: 190px;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: .65rem;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 1.7rem;
+  padding: 1.25rem;
+  color: rgba(255,255,255,.9);
+  box-shadow: inset 0 -90px 80px rgba(0,0,0,.5), 0 18px 50px rgba(0,0,0,.3);
+}
+
+.hero-game-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 70% 20%, rgba(255,255,255,.28), transparent 32%);
+  mix-blend-mode: overlay;
+}
+
+.hero-game-card:nth-child(n+7) { transform: translateX(-45%); }
+.hero-game-card span { position: relative; font-size: .95rem; font-weight: 900; text-transform: uppercase; letter-spacing: .025em; }
+.hero-game-card svg { position: relative; opacity: .8; }
+.hero-game-card--pubg { background: linear-gradient(145deg,#bb6b26,#322114); }
+.hero-game-card--freefire { background: linear-gradient(145deg,#426b78,#1b2737); }
+.hero-game-card--valorant { background: linear-gradient(145deg,#e24e61,#261728); }
+.hero-game-card--playstation { background: linear-gradient(145deg,#186ad4,#162544); }
+.hero-game-card--fc { background: linear-gradient(145deg,#8db928,#1a321e); }
+.hero-game-card--fortnite { background: linear-gradient(145deg,#9a59dc,#28204b); }
+.hero-game-card--roblox { background: linear-gradient(145deg,#dc3e3e,#30191c); }
+.hero-game-card--steam { background: linear-gradient(145deg,#2b7ea7,#162635); }
+.hero-game-card--legends { background: linear-gradient(145deg,#e09836,#3b2143); }
+.hero-game-card--cod { background: linear-gradient(145deg,#848f72,#1b2420); }
+.hero-game-card--lol { background: linear-gradient(145deg,#17859b,#2a1e45); }
+.hero-game-card--minecraft { background: linear-gradient(145deg,#55a34a,#3a2c1f); }
+
+.hero-cinematic-overlay {
+  background:
+    linear-gradient(180deg, rgba(5,7,10,.38) 0%, rgba(5,7,10,.64) 34%, #07090d 91%),
+    radial-gradient(circle at 50% 44%, rgba(5,7,10,.12), rgba(5,7,10,.78) 72%);
+  backdrop-filter: saturate(.72);
+}
+
+.hero-title-accent { display: inline-block; color: #facc15; text-shadow: 0 16px 50px rgba(250,204,21,.24); }
+
+.hero-search-shell {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px;
+  background: rgba(14,17,23,.88);
+  padding: .45rem;
+  box-shadow: 0 24px 80px rgba(0,0,0,.48), 0 0 0 5px rgba(255,255,255,.025);
+  backdrop-filter: blur(18px);
+  transition: border-color .25s, box-shadow .25s;
+}
+.hero-search-shell:focus-within { border-color: rgba(250,204,21,.72); box-shadow: 0 24px 80px rgba(0,0,0,.48), 0 0 0 4px rgba(250,204,21,.12); }
+.hero-search-button { display:flex; min-height:3rem; align-items:center; justify-content:center; gap:.55rem; border-radius:999px; background:#facc15; padding:0 1.1rem; color:#111318; font-weight:900; box-shadow:0 8px 25px rgba(250,204,21,.2); transition:transform .2s, background .2s; }
+.hero-search-button:hover { background:#fde047; transform:scale(1.025); }
+.hero-search-button:active { transform:scale(.98); }
+
+.hero-suggestion-panel { position:absolute; z-index:30; top:calc(100% + .65rem); left:1rem; right:1rem; max-height:19rem; overflow:auto; border:1px solid rgba(255,255,255,.12); border-radius:1.25rem; background:rgba(13,16,22,.97); padding:.45rem; text-align:start; box-shadow:0 24px 70px rgba(0,0,0,.55); backdrop-filter:blur(20px); }
+.hero-suggestion-panel button { display:flex; width:100%; align-items:center; gap:.75rem; border-radius:.85rem; padding:.8rem 1rem; color:rgba(255,255,255,.78); font-size:.9rem; font-weight:700; transition:background .15s,color .15s; }
+.hero-suggestion-panel button:hover,.hero-suggestion-panel button.is-active { background:rgba(250,204,21,.12); color:white; }
+.hero-search-chip { border:1px solid rgba(255,255,255,.12); border-radius:999px; background:rgba(255,255,255,.045); padding:.55rem .95rem; color:rgba(255,255,255,.68); font-size:.75rem; font-weight:800; transition:all .2s; backdrop-filter:blur(10px); }
+.hero-search-chip:hover { border-color:rgba(250,204,21,.5); background:rgba(250,204,21,.1); color:white; transform:translateY(-2px); }
+
+/* A complete light treatment, rather than a dark block below the light navbar. */
+html:not(.dark) .home-hero {
+  background: #f4f1e8 !important;
+  color: #17181c;
+}
+
+html:not(.dark) .hero-game-wall { opacity: .42; filter: saturate(.7); }
+html:not(.dark) .hero-game-card {
+  border-color: rgba(15,23,42,.13);
+  color: rgba(15,23,42,.72);
+  box-shadow: inset 0 -85px 70px rgba(255,255,255,.35), 0 18px 45px rgba(15,23,42,.12);
+}
+html:not(.dark) .hero-cinematic-overlay {
+  background:
+    linear-gradient(180deg, rgba(244,241,232,.22) 0%, rgba(244,241,232,.72) 38%, #f4f1e8 92%),
+    radial-gradient(circle at 50% 43%, rgba(255,255,255,.2), rgba(244,241,232,.76) 72%);
+  backdrop-filter: saturate(.7);
+}
+html:not(.dark) .home-hero h1 { color:#111318; }
+html:not(.dark) .home-hero > div:last-child > div:first-child {
+  border-color:rgba(15,23,42,.1);
+  background:rgba(255,255,255,.68);
+  color:rgba(15,23,42,.68);
+  box-shadow:0 8px 30px rgba(15,23,42,.06);
+}
+html:not(.dark) .home-hero p { color:rgba(15,23,42,.62) !important; }
+html:not(.dark) .hero-search-shell {
+  border-color:rgba(15,23,42,.14);
+  background:rgba(255,255,255,.9);
+  box-shadow:0 22px 65px rgba(15,23,42,.13), 0 0 0 5px rgba(255,255,255,.35);
+}
+html:not(.dark) .hero-search-shell input { color:#17181c; }
+html:not(.dark) .hero-search-shell input::placeholder { color:rgba(15,23,42,.38); }
+html:not(.dark) .hero-search-shell > svg { color:rgba(15,23,42,.35); }
+html:not(.dark) .hero-search-shell:focus-within { box-shadow:0 22px 65px rgba(15,23,42,.13), 0 0 0 4px rgba(250,204,21,.2); }
+html:not(.dark) .hero-search-chip { border-color:rgba(15,23,42,.12); background:rgba(255,255,255,.58); color:rgba(15,23,42,.62); }
+html:not(.dark) .hero-search-chip:hover { border-color:rgba(202,138,4,.5); background:rgba(250,204,21,.18); color:#17181c; }
+html:not(.dark) .hero-suggestion-panel { border-color:rgba(15,23,42,.12); background:rgba(255,255,255,.97); box-shadow:0 24px 60px rgba(15,23,42,.16); }
+html:not(.dark) .hero-suggestion-panel button { color:rgba(15,23,42,.72); }
+html:not(.dark) .hero-suggestion-panel button:hover,
+html:not(.dark) .hero-suggestion-panel button.is-active { color:#111318; }
+
+@media (max-width: 900px) {
+  .hero-game-wall { grid-template-columns: repeat(4, minmax(130px,1fr)); gap:.75rem; opacity:.82; }
+  .hero-game-card { min-height:160px; border-radius:1.25rem; }
+  .hero-game-card:nth-child(n+7) { transform:none; }
+}
+
+@media (max-width: 560px) {
+  .home-hero { min-height:680px; }
+  .hero-game-wall { inset:2.5rem -5rem auto; grid-template-columns:repeat(3,150px); opacity:.65; }
+  .hero-game-card { min-height:135px; padding:1rem; }
+  .hero-game-card:nth-child(n+7) { display:none; }
+  .hero-search-button { width:3rem; padding:0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero-grid,
   .search-aura,

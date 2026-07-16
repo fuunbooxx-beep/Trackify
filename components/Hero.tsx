@@ -1,348 +1,217 @@
 "use client";
 
 import { collection, getDocs } from "firebase/firestore";
-import { Search, ShieldAlert } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { Gamepad2, Search, ShieldCheck, TrendingUp } from "lucide-react";
+import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
 import { db } from "@/lib/firebase";
 import { useLanguage } from "@/lib/i18n/context";
 import { scoreTarget } from "@/lib/target-search-score";
 import type { TargetRecord } from "@/lib/target-utils";
 
 type CatalogTarget = TargetRecord & { id: string };
+type PopularSearch = { label: string; query: string };
 
-const SUGGESTION_LIMIT = 10;
-
-type PopularSearch = {
-  label: string;
-  query: string;
-};
+const gameTiles = [
+  { name: "PUBG Mobile", className: "hero-game-card--pubg" },
+  { name: "Free Fire", className: "hero-game-card--freefire" },
+  { name: "Valorant", className: "hero-game-card--valorant" },
+  { name: "PlayStation", className: "hero-game-card--playstation" },
+  { name: "EA SPORTS FC", className: "hero-game-card--fc" },
+  { name: "Fortnite", className: "hero-game-card--fortnite" },
+  { name: "Roblox", className: "hero-game-card--roblox" },
+  { name: "Steam", className: "hero-game-card--steam" },
+  { name: "Mobile Legends", className: "hero-game-card--legends" },
+  { name: "Call of Duty", className: "hero-game-card--cod" },
+  { name: "League of Legends", className: "hero-game-card--lol" },
+  { name: "Minecraft", className: "hero-game-card--minecraft" },
+];
 
 export function Hero() {
   const [query, setQuery] = useState("");
   const [catalogTargets, setCatalogTargets] = useState<CatalogTarget[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
-  const [isMobile, setIsMobile] = useState(false);
-  const listId = useRef(`hero-search-suggestions-${Math.random().toString(36).slice(2, 9)}`);
+  const listId = `hero-search-${useId().replace(/:/g, "")}`;
   const router = useRouter();
   const { lang } = useLanguage();
-  const prefersReducedMotion = useReducedMotion();
   const deferredQuery = useDeferredValue(query);
-
-  const fallbackSearches: PopularSearch[] =
-    lang === "ar"
-      ? [
-          { label: "حسابات ببجي", query: "حسابات ببجي" },
-          { label: "شحن شدات", query: "شحن شدات" },
-          { label: "فالورانت بوينتس", query: "فالورانت بوينتس" },
-        ]
-      : [
-          { label: "PUBG accounts", query: "PUBG accounts" },
-          { label: "UC top-up", query: "UC top-up" },
-          { label: "Valorant points", query: "Valorant points" },
-        ];
-
-  const handleSearch = (event: React.FormEvent) => {
-    event.preventDefault();
-    goToSearch(query);
-  };
-
-  const goToSearch = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-  };
 
   useEffect(() => {
     let alive = true;
-
-    const fetchCatalog = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, "targets"));
-        if (!alive) return;
-        const rows = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as CatalogTarget));
-        setCatalogTargets(rows);
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    void fetchCatalog();
-
-    return () => {
-      alive = false;
-    };
+    void getDocs(collection(db, "targets"))
+      .then((snapshot) => {
+        if (alive) setCatalogTargets(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as CatalogTarget)));
+      })
+      .catch(console.error);
+    return () => { alive = false; };
   }, []);
 
   const suggestions = useMemo(() => {
-    const q = deferredQuery.trim();
-    if (!q || !catalogTargets.length) return [];
-
+    const value = deferredQuery.trim();
+    if (!value) return [];
     return catalogTargets
-      .map((target) => ({ target, searchScore: scoreTarget(q, target) }))
-      .filter((row) => row.searchScore > 0)
-      .sort((a, b) => {
-        if (b.searchScore !== a.searchScore) return b.searchScore - a.searchScore;
-        const reportsDifference = Number(b.target.reportCount || 0) - Number(a.target.reportCount || 0);
-        if (reportsDifference !== 0) return reportsDifference;
-        return String(a.target.name || "").localeCompare(String(b.target.name || ""));
-      })
-      .slice(0, SUGGESTION_LIMIT)
-      .map((row) => row.target);
-  }, [deferredQuery, catalogTargets]);
+      .map((target) => ({ target, score: scoreTarget(value, target) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || Number(b.target.reportCount || 0) - Number(a.target.reportCount || 0))
+      .slice(0, 8)
+      .map(({ target }) => target);
+  }, [catalogTargets, deferredQuery]);
 
-  useEffect(() => {
-    setActiveSuggestion(-1);
-  }, [deferredQuery]);
+  const fallbackSearches: PopularSearch[] = lang === "ar"
+    ? [
+        { label: "حسابات ببجي", query: "حسابات ببجي" },
+        { label: "شحن شدات", query: "شحن شدات" },
+        { label: "متاجر بلايستيشن", query: "متاجر بلايستيشن" },
+        { label: "بطاقات ستيم", query: "بطاقات ستيم" },
+      ]
+    : [
+        { label: "PUBG accounts", query: "PUBG accounts" },
+        { label: "UC top-up", query: "UC top-up" },
+        { label: "PlayStation stores", query: "PlayStation stores" },
+        { label: "Steam cards", query: "Steam cards" },
+      ];
 
-  const popularSearches = useMemo((): PopularSearch[] => {
-    if (!catalogTargets.length) return [];
-    return catalogTargets
+  const popularSearches = useMemo(() => {
+    const rows = catalogTargets
       .filter((target) => String(target.name || "").trim())
-      .sort((a, b) => {
-        const reportsDifference = Number(b.reportCount || 0) - Number(a.reportCount || 0);
-        if (reportsDifference !== 0) return reportsDifference;
-        return Number(b.trustScore || 0) - Number(a.trustScore || 0);
-      })
-      .slice(0, 3)
-      .map((target) => ({
-        label: String(target.name || ""),
-        query: String(target.name || ""),
-      }));
-  }, [catalogTargets]);
+      .sort((a, b) => Number(b.reportCount || 0) - Number(a.reportCount || 0))
+      .slice(0, 4)
+      .map((target) => ({ label: String(target.name), query: String(target.name) }));
+    return rows.length ? rows : fallbackSearches;
+  }, [catalogTargets, lang]);
 
-  useEffect(() => {
-    const mobileQuery = window.matchMedia("(max-width: 768px)");
-    const updateMobileState = () => setIsMobile(mobileQuery.matches);
-    updateMobileState();
-    mobileQuery.addEventListener("change", updateMobileState);
-
-    return () => {
-      mobileQuery.removeEventListener("change", updateMobileState);
-    };
-  }, []);
-
-  const visibleSearches = popularSearches.length > 0 ? popularSearches : fallbackSearches;
-  const showSuggestionPanel = inputFocused && query.trim().length > 0 && suggestions.length > 0;
+  const goToSearch = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed) router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
 
   const pickSuggestion = (value: string) => {
     setQuery(value);
     setInputFocused(false);
-    setActiveSuggestion(-1);
     goToSearch(value);
   };
 
-  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") setInputFocused(false);
     if (!suggestions.length) return;
-
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveSuggestion((i) => Math.min(i + 1, suggestions.length - 1));
-    } else if (event.key === "ArrowUp") {
+      setActiveSuggestion((current) => Math.min(current + 1, suggestions.length - 1));
+    }
+    if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveSuggestion((i) => Math.max(i - 1, -1));
-    } else if (event.key === "Escape") {
-      setInputFocused(false);
-      setActiveSuggestion(-1);
-    } else if (event.key === "Enter" && activeSuggestion >= 0 && suggestions[activeSuggestion]) {
+      setActiveSuggestion((current) => Math.max(current - 1, -1));
+    }
+    if (event.key === "Enter" && activeSuggestion >= 0) {
       event.preventDefault();
-      pickSuggestion(String(suggestions[activeSuggestion].name || ""));
+      pickSuggestion(String(suggestions[activeSuggestion]?.name || ""));
     }
   };
-  const tickerMessages =
-    lang === "ar"
-      ? [
-          "راجع قبل ما تحوّل فلوسك",
-          "اعرف تجارب الناس قبل ما تشتري",
-          "افحص رقم البائع أو رابط الصفحة قبل الدفع",
-          "التحقق السريع بيحميك من الاحتيال",
-          "شوف تقييم الثقة قبل أي عملية شراء",
-          "اقرأ البلاغات المعتمدة وخد قرارك",
-        ]
-      : [
-          "Check before you send your money",
-          "See real experiences before you buy",
-          "Verify seller phone or page link before paying",
-          "A quick check protects you from fraud",
-          "Review trust score before any purchase",
-          "Read verified reports, then decide",
-        ];
-  const tickerItems = Array.from({ length: 4 }).flatMap(() => tickerMessages);
-  const shouldSimplifyMotion = Boolean(prefersReducedMotion) || isMobile;
+
+  const showSuggestions = inputFocused && query.trim().length > 0 && suggestions.length > 0;
 
   return (
-    <section className="relative flex min-h-[80vh] flex-col items-center justify-center overflow-hidden pb-16 pt-24 sm:pt-32 md:pb-32 md:pt-48">
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background z-0" />
-      <div className="hero-grid absolute inset-0 z-0 opacity-70" />
-      {!shouldSimplifyMotion && (
-        <motion.div
-        aria-hidden="true"
-        className="absolute left-1/2 top-[18%] z-0 h-px w-[min(86vw,980px)] -translate-x-1/2 bg-gradient-to-r from-transparent via-primary/40 to-transparent dark:via-neon-blue/50"
-        animate={{ y: [0, 360, 0], opacity: [0, 0.55, 0] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-      />
-      )}
-      {!shouldSimplifyMotion && (
-        <motion.div
-        aria-hidden="true"
-        className="hero-signal-panel absolute left-[10%] top-[34%] z-0 hidden h-20 w-36 rounded-md border border-primary/15 bg-white/35 shadow-[0_18px_60px_rgba(37,99,235,0.12)] backdrop-blur-sm dark:border-neon-blue/20 dark:bg-white/[0.03] dark:shadow-[0_18px_60px_rgba(0,243,255,0.10)] md:block"
-        animate={{ y: [0, -14, 0], opacity: [0.22, 0.48, 0.22], rotate: [-3, 2, -3] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-      />
-      )}
-      {!shouldSimplifyMotion && (
-        <motion.div
-        aria-hidden="true"
-        className="hero-signal-panel absolute right-[12%] top-[24%] z-0 hidden h-16 w-32 rounded-md border border-blue-500/15 bg-white/30 shadow-[0_16px_50px_rgba(14,165,233,0.12)] backdrop-blur-sm dark:border-blue-500/20 dark:bg-white/[0.03] dark:shadow-[0_16px_50px_rgba(0,243,255,0.08)] md:block"
-        animate={{ y: [0, -18, 0], x: [0, 8, 0], opacity: [0.18, 0.42, 0.18] }}
-        transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
-      />
-      )}
-
-      <div className="relative z-10 mx-auto w-full max-w-4xl px-4 text-center">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+    <section className="home-hero relative flex min-h-[720px] items-center justify-center overflow-hidden bg-[#07090d] px-4 pb-20 pt-28 text-white sm:min-h-[780px] sm:px-6 sm:pt-32">
+      <div className="hero-game-wall" aria-hidden="true">
+        {gameTiles.map((game, index) => (
           <motion.div
-            className="mx-auto mb-6 w-full max-w-3xl overflow-hidden rounded-xl border border-primary/20 bg-background/65 shadow-sm backdrop-blur"
-            initial={{ opacity: 0, y: 12 }}
+            key={game.name}
+            className={`hero-game-card ${game.className}`}
+            initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.05 }}
+            transition={{ duration: 0.55, delay: index * 0.035 }}
           >
-            <div className="hero-marquee" dir="ltr">
-              <div className={`hero-marquee-track ${shouldSimplifyMotion ? "hero-marquee-track--static" : ""}`}>
-                {(shouldSimplifyMotion ? [0] : [0, 1]).map((segment) => (
-                  <div key={`segment-${segment}`} className="hero-marquee-segment" aria-hidden={segment === 1}>
-                    {tickerItems.map((message, i) => (
-                      <div key={`ticker-${segment}-${i}`} className="hero-marquee-item" dir={lang === "ar" ? "rtl" : "ltr"}>
-                        <span className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-xs font-black text-primary-foreground">
-                          {lang === "ar" ? "تنبيه مهم" : "Important"}
-                        </span>
-                        <span className="text-sm font-bold text-foreground/90 md:text-base">{message}</span>
-                        <ShieldAlert className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold text-muted-foreground md:text-base">
-                          {lang === "ar" ? "تحقق أولًا لحماية فلوسك." : "Verify first to protect your money."}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <Gamepad2 className="h-8 w-8" />
+            <span>{game.name}</span>
           </motion.div>
+        ))}
+      </div>
+      <div className="hero-cinematic-overlay absolute inset-0" aria-hidden="true" />
 
-          <motion.h1
-            className="mx-auto mb-5 max-w-[14ch] select-none text-[clamp(2.35rem,11vw,3.75rem)] font-black leading-[1.12] tracking-normal md:mb-6 md:max-w-none md:text-6xl"
-            initial={{ opacity: 0, y: 18, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.7, delay: 0.12, ease: "easeOut" }}
-          >
-            {lang === "ar" ? "إفحص " : "Check "}
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-500 dark:from-neon-blue dark:to-neon-purple">
-              {lang === "ar" ? "البائعين والصفحات" : "sellers and pages"}
-            </span>
-            <br />
-            {lang === "ar" ? "قبل ما تشتري الداتا أو الحسابات" : "before buying top-ups or accounts"}
-          </motion.h1>
+      <motion.div
+        className="relative z-10 mx-auto flex w-full max-w-5xl flex-col items-center text-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.65, ease: "easeOut" }}
+      >
+        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/35 px-4 py-2 text-xs font-bold text-white/75 backdrop-blur-md sm:text-sm">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          {lang === "ar" ? "مجتمع أكثر أمانًا للاعبين في مصر" : "Safer gaming deals across Egypt"}
+        </div>
 
-          <motion.p
-            className="mx-auto mb-8 max-w-2xl text-base font-medium leading-7 text-muted-foreground sm:text-lg md:mb-10 md:text-xl"
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.24, ease: "easeOut" }}
-          >
-            {lang === "ar"
-              ? "تحقق قبل أن تتعامل: ابحث برقم الهاتف، أو رابط الصفحة، أو الاسم، واطلع على مستوى الثقة وتجارب الآخرين."
-              : "Search by phone number, page link, or name and instantly view trust score and user experiences."}
-          </motion.p>
+        <h1 className="max-w-[900px] text-[clamp(2.7rem,7vw,5.7rem)] font-black leading-[0.98] tracking-[-0.055em]">
+          {lang === "ar" ? "اتأكد قبل ما " : "Check before you "}
+          <span className="hero-title-accent">{lang === "ar" ? "تدفع." : "pay."}</span>
+        </h1>
+        <p className="mt-6 max-w-2xl text-sm font-medium leading-7 text-white/65 sm:text-lg">
+          {lang === "ar"
+            ? "ابحث برقم الهاتف أو اسم البائع أو رابط الصفحة، وشوف تقييم الثقة وتجارب الناس قبل أي معاملة."
+            : "Search a phone number, seller name, or page link. See trust scores and real reports before making a gaming deal."}
+        </p>
 
-          <motion.form
-            onSubmit={handleSearch}
-            className="group relative mx-auto w-full max-w-2xl"
-            initial={{ opacity: 0, y: 20, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.34, ease: "easeOut" }}
-          >
-            <div className="search-aura absolute -inset-1 bg-gradient-to-r from-primary via-sky-400 to-blue-500 dark:from-neon-blue dark:via-blue-500 dark:to-neon-purple rounded-full blur opacity-30 group-hover:opacity-55 transition duration-500" />
-            <div className="relative">
-              <div className="relative flex items-center bg-card/95 rounded-full p-2 border border-primary/15 shadow-[0_18px_45px_rgba(37,99,235,0.16)] backdrop-blur dark:border-border dark:shadow-xl">
-                <input
-                  type="text"
-                  role="combobox"
-                  aria-expanded={showSuggestionPanel}
-                  aria-controls={listId.current}
-                  aria-autocomplete="list"
-                  autoComplete="off"
-                  placeholder={lang === "ar" ? "رقم الفون مثلا: 01000000000 أو لينك الصفحة..." : "Example: 01000000000 or page URL..."}
-                  className="min-w-0 flex-1 bg-transparent px-4 text-sm text-foreground outline-none placeholder:text-muted-foreground rtl:text-right sm:px-6 sm:text-base"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onFocus={() => setInputFocused(true)}
-                  onBlur={() => {
-                    window.setTimeout(() => setInputFocused(false), 120);
-                  }}
-                  onKeyDown={handleSearchKeyDown}
-                />
+        <form
+          onSubmit={(event) => { event.preventDefault(); goToSearch(query); }}
+          className="relative mt-9 w-full max-w-3xl sm:mt-11"
+        >
+          <div className="hero-search-shell">
+            <Search className="ms-2 hidden h-5 w-5 shrink-0 text-white/40 sm:block" />
+            <input
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setActiveSuggestion(-1); }}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => window.setTimeout(() => setInputFocused(false), 120)}
+              onKeyDown={handleKeyDown}
+              role="combobox"
+              aria-expanded={showSuggestions}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              autoComplete="off"
+              className="min-w-0 flex-1 bg-transparent px-3 py-4 text-sm font-semibold text-white outline-none placeholder:text-white/35 sm:px-4 sm:py-5 sm:text-base"
+              placeholder={lang === "ar" ? "رقم الهاتف، اسم البائع أو رابط الصفحة..." : "Phone number, seller name or page URL..."}
+            />
+            <button type="submit" aria-label={lang === "ar" ? "بحث" : "Search"} className="hero-search-button">
+              <Search className="h-5 w-5" />
+              <span className="hidden sm:inline">{lang === "ar" ? "ابحث" : "Search"}</span>
+            </button>
+          </div>
+
+          {showSuggestions && (
+            <div id={listId} role="listbox" className="hero-suggestion-panel">
+              {suggestions.map((target, index) => (
                 <button
-                  type="submit"
-                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary text-white transition-transform hover:scale-105 dark:bg-neon-blue dark:text-black sm:h-12 sm:w-12"
+                  key={target.id}
+                  type="button"
+                  role="option"
+                  aria-selected={index === activeSuggestion}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveSuggestion(index)}
+                  onClick={() => pickSuggestion(String(target.name || ""))}
+                  className={index === activeSuggestion ? "is-active" : ""}
                 >
-                  <Search className="w-5 h-5 ltr-icon" />
+                  <Search className="h-4 w-4 text-primary" />
+                  <span>{String(target.name || "")}</span>
                 </button>
-              </div>
-
-              {showSuggestionPanel ? (
-                <div
-                  id={listId.current}
-                  role="listbox"
-                  dir={lang === "ar" ? "rtl" : "ltr"}
-                  className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(18rem,50vh)] overflow-y-auto rounded-2xl border border-border/80 bg-popover/95 py-1 text-start shadow-xl backdrop-blur-md"
-                >
-                  {suggestions.map((target, index) => {
-                    const name = String(target.name || "");
-                    const active = index === activeSuggestion;
-                    return (
-                      <button
-                        key={target.id}
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        className={`flex w-full cursor-pointer px-4 py-2.5 text-left text-sm font-semibold transition-colors rtl:text-right ${
-                          active ? "bg-primary/15 text-foreground" : "text-foreground hover:bg-muted/80"
-                        }`}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onMouseEnter={() => setActiveSuggestion(index)}
-                        onClick={() => pickSuggestion(name)}
-                      >
-                        {name}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
+              ))}
             </div>
-          </motion.form>
+          )}
+        </form>
 
-          <motion.div
-            className="mt-6 flex flex-wrap justify-center gap-2 text-sm font-medium text-muted-foreground sm:mt-8 sm:gap-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.52 }}
-          >
-            <span>{lang === "ar" ? "عمليات بحث شائعة:" : "Popular searches:"}</span>
-            {visibleSearches.map((item) => (
-              <button
-                key={item.query}
-                type="button"
-                onClick={() => goToSearch(item.query)}
-                className="hover:text-primary dark:hover:text-neon-blue cursor-pointer transition-colors bg-secondary/50 px-2 py-0.5 rounded-md font-bold"
-              >
+        <div className="mt-7 flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
+          <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-white/45">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            {lang === "ar" ? "الأكثر بحثًا" : "Trending searches"}
+          </span>
+          <div className="flex flex-wrap justify-center gap-2">
+            {popularSearches.map((item) => (
+              <button key={item.query} type="button" onClick={() => goToSearch(item.query)} className="hero-search-chip">
                 {item.label}
               </button>
             ))}
-          </motion.div>
-        </motion.div>
-      </div>
+          </div>
+        </div>
+      </motion.div>
     </section>
   );
 }
