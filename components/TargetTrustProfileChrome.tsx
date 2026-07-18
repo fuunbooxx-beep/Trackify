@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import type { TargetRecord } from "@/lib/target-utils";
 import {
   AlertTriangle,
@@ -73,10 +73,47 @@ export function TrustScoreRing({
 }) {
   const gradId = useId().replace(/:/g, "");
   const s = Math.max(0, Math.min(100, Math.round(score)));
+  const [animatedScore, setAnimatedScore] = useState(100);
+
+  useEffect(() => {
+    if (isNoData) {
+      setAnimatedScore(0);
+      return;
+    }
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      setAnimatedScore(s);
+      return;
+    }
+
+    setAnimatedScore(100);
+    let frame = 0;
+    const duration = 1800;
+    const delay = window.setTimeout(() => {
+      const startedAt = performance.now();
+      const animate = (now: number) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setAnimatedScore(100 + (s - 100) * eased);
+        if (progress < 1) frame = window.requestAnimationFrame(animate);
+      };
+      frame = window.requestAnimationFrame(animate);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(delay);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [isNoData, s]);
+
+  const visibleScore = Math.max(0, Math.min(100, animatedScore));
+  const visibleRoundedScore = Math.round(visibleScore);
   const r = 52;
   const c = 2 * Math.PI * r;
-  const dash = isNoData ? 0 : (s / 100) * c;
-  const { stroke, glow, labelKey } = isNoData ? { stroke: "#64748b", glow: "rgba(100,116,139,0.3)", labelKey: "medium" as const } : trustScoreHue(s);
+  const dash = isNoData ? 0 : (visibleScore / 100) * c;
+  const { stroke, glow } = isNoData ? { stroke: "#64748b", glow: "rgba(100,116,139,0.3)" } : trustScoreHue(visibleRoundedScore);
+  const { labelKey } = isNoData ? { labelKey: "medium" as const } : trustScoreHue(s);
 
   const tierLabel =
     lang === "ar"
@@ -98,7 +135,7 @@ export function TrustScoreRing({
       ? "يُحسب من البلاغات الموثقة، جودة الأدلة، وتنوع التجارب المسجلة."
       : "Computed from verified reports, evidence strength, and the mix of community experiences.";
 
-  const showRoundCap = !isNoData && s >= 2;
+  const showRoundCap = !isNoData && visibleScore >= 2;
 
   return (
     <div className="glass-cyber-card relative isolate overflow-hidden border-primary/10 p-5 dark:border-primary/15">
@@ -133,7 +170,7 @@ export function TrustScoreRing({
                 strokeWidth="7"
                 strokeLinecap={showRoundCap ? "round" : "butt"}
                 strokeDasharray={`${dash} ${c}`}
-                className="transition-[stroke-dasharray] duration-700 ease-out"
+                className="trust-score-ring-progress"
               />
             ) : null}
           </svg>
@@ -143,7 +180,7 @@ export function TrustScoreRing({
             ) : (
               <>
                 <span className="text-4xl font-black tabular-nums tracking-tight" style={{ color: stroke }}>
-                  {s}
+                  {visibleRoundedScore}
                 </span>
                 <span className="mt-0.5 text-[11px] font-bold tabular-nums text-slate-500 dark:text-slate-400">/ 100</span>
               </>

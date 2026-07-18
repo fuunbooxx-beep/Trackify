@@ -803,9 +803,9 @@ export default function TargetDetailsPage() {
   return (
     <>
       <Navbar />
-      <main className="mx-auto min-h-screen w-full max-w-6xl overflow-x-clip bg-gradient-to-b from-slate-50 to-white px-3 py-24 text-slate-900 dark:from-[#020308] dark:to-[#0a0f1c] dark:text-slate-100">
+      <main className="target-page-canvas min-h-screen w-full overflow-x-clip bg-gradient-to-b from-slate-50 to-white px-4 pb-24 pt-28 text-slate-900 dark:from-[#020308] dark:to-[#0a0f1c] dark:text-slate-100 sm:px-6 lg:px-10">
         <section
-          className={`trackify-profile-page glass-panel relative max-w-full overflow-hidden rounded-[32px] border shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:shadow-[0_26px_90px_rgba(0,0,0,0.55)] ${
+          className={`trackify-profile-page target-profile-layout relative mx-auto max-w-7xl ${
             isNoData || isHighRisk ? "border-t-border" : isTrusted ? "border-t-green-500" : "border-t-yellow-500"
           }`}
         >
@@ -813,9 +813,9 @@ export default function TargetDetailsPage() {
             className="pointer-events-none absolute inset-0 trackify-cyber-grid opacity-30 dark:opacity-[0.45]"
             aria-hidden
           />
-          <div className="relative z-10 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="min-w-0 space-y-6 p-4 sm:p-5 md:p-8 xl:p-9">
-              <div className="flex min-w-0 flex-col gap-7 lg:flex-row lg:items-start lg:gap-10 xl:gap-12">
+          <div className="target-profile-grid relative z-10 grid grid-cols-1 gap-0 xl:grid-cols-12 xl:gap-x-14">
+            <div className="target-profile-content min-w-0 space-y-0">
+              <div className="target-profile-hero flex min-w-0 flex-col gap-7 border-b border-border/70 py-10 lg:flex-row lg:items-center lg:gap-10 xl:gap-12">
                 <LogoBlock logoUrl={target.logoUrl || ""} name={target.name || ""} />
 
                 <div className="min-w-0 flex-1 space-y-4 text-center sm:text-start lg:ps-2 lg:pt-2 xl:ps-4">
@@ -904,7 +904,7 @@ export default function TargetDetailsPage() {
                 </div>
               </div>
 
-                  <div className="trackify-profile-wide-row flex justify-center sm:justify-start">
+                  <div className="trackify-profile-wide-row target-about-row flex justify-center sm:justify-start">
                     <Link
                       href={`${getTargetHref({ id: activeTargetId, name: target.name })}/about`}
                       className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-amber-300 bg-amber-50 px-6 py-2.5 text-sm font-black text-amber-700 transition duration-300 hover:-translate-y-0.5 hover:border-amber-400 hover:bg-amber-100 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] dark:border-neon-blue/40 dark:bg-neon-blue/10 dark:text-neon-blue dark:hover:shadow-[0_0_28px_rgba(250,204,21,0.12)]"
@@ -914,7 +914,7 @@ export default function TargetDetailsPage() {
                     </Link>
                   </div>
 
-                  <div className="trackify-profile-wide-row glass-cyber-card w-full min-w-0 rounded-3xl border border-border p-4 text-start sm:p-5">
+                  <div className="trackify-profile-wide-row target-profile-section w-full min-w-0 border-b border-border/70 py-10 text-start">
                     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted-foreground">
                         {lang === "ar" ? "بيانات التعريف" : "Identity details"}
@@ -1014,7 +1014,7 @@ export default function TargetDetailsPage() {
                   </div>
 
                   <div
-                    className={`glass-cyber-card rounded-2xl border px-4 py-3 text-sm md:text-[15px] ${
+                    className={`target-profile-notice border-b border-border/70 py-8 text-sm md:text-[15px] ${
                       isDealNotRecommended
                         ? "border-destructive/35 bg-destructive/10"
                         : "border-border/70 bg-secondary/25"
@@ -1053,13 +1053,16 @@ export default function TargetDetailsPage() {
                     </div>
                   </div>
 
+              <div className="target-flags-section">
               <BehaviorFlagStrip
                 reasons={targetReasons}
                 reasonLabel={getTargetReasonLabel}
                 reasonTitle={getTargetReasonDescription}
                 lang={lang}
               />
+              </div>
 
+              <div className="target-evidence-section">
               <EvidencePreviewGallery
                 urls={reportDerived.evidenceUrls}
                 extraCount={Math.max(0, reportDerived.evidenceUrls.length - 4)}
@@ -1075,12 +1078,15 @@ export default function TargetDetailsPage() {
                   document.getElementById("community-reports")?.scrollIntoView({ behavior: "smooth" })
                 }
               />
+              </div>
 
-              <SafetyBeforePayCard lang={lang} />
+              <div className="target-safety-section">
+                <SafetyBeforePayCard lang={lang} />
+              </div>
             </div>
 
             <aside
-              className={`trackify-score-column ${statusPaneTone} relative z-10 overflow-x-hidden border-t p-4 md:p-6 xl:sticky xl:top-24 xl:min-h-full xl:self-stretch xl:border-r-0 xl:border-t-0 ${statusPaneBorder} ${statusBg}`}
+              className={`trackify-score-column target-score-summary relative z-10 overflow-x-hidden border-b border-border/70 py-10 xl:self-start ${statusPaneTone} ${statusBg}`}
             >
               <div className="flex h-full flex-col gap-4">
                 <TrustScoreRing score={Number(target.trustScore ?? 0)} isNoData={isNoData} lang={lang} />
@@ -1110,7 +1116,7 @@ export default function TargetDetailsPage() {
                   </div>
                 ) : null}
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="target-metrics-list grid grid-cols-2 gap-x-6 gap-y-0">
                   <Metric label={lang === "ar" ? "تجارب ناجحة" : "Successful reports"} value={reportDerived.successCount} />
                   <Metric label={lang === "ar" ? "بلاغات نصب" : "Scam reports"} value={reportDerived.scamCount} />
                   <Metric label={lang === "ar" ? "لقطات أدلة" : "Evidence shots"} value={reportDerived.evidenceImageCount} />
@@ -1133,7 +1139,7 @@ export default function TargetDetailsPage() {
                   <Metric label={lang === "ar" ? "أرقام" : "Phones"} value={phones.length} />
                 </div>
 
-                <div className="grid gap-2 pt-2">
+                <div className="target-action-buttons grid gap-3 pt-2">
                   <SidebarActionLink href="#community-reports" tone="neutral">
                     <Eye className="h-4 w-4 shrink-0" />
                     {lang === "ar" ? "عرض البلاغات" : "View reports"}
@@ -1158,7 +1164,7 @@ export default function TargetDetailsPage() {
                   </SidebarActionButton>
                 </div>
 
-                <div className="mt-auto grid gap-2">
+                <div className="target-action-buttons target-admin-buttons mt-auto grid gap-3">
                   {isAdmin && (
                     <Link
                       href={`/dashboard?edit=${target.id}`}
@@ -1190,8 +1196,8 @@ export default function TargetDetailsPage() {
           </div>
         </section>
 
-        <section id="community-reports" className="mt-10 scroll-mt-28">
-          <div className="mb-6 flex flex-col gap-3 rounded-3xl border border-border bg-background/60 px-5 py-4 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between md:px-6">
+        <section id="community-reports" className="mx-auto mt-8 max-w-7xl scroll-mt-28 border-t border-border/70 pt-12">
+          <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <h2 className="text-2xl font-black tracking-tight md:text-3xl flex items-center gap-3">
               <MessageCircle className="w-6 h-6 text-primary dark:text-neon-blue" />
               {lang === "ar" ? `البلاغات وتجارب الناس (${reports.length})` : `Reports and user experiences (${reports.length})`}
