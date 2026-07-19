@@ -227,8 +227,8 @@
 }
 
 .trust-score-ring-progress {
-  filter: drop-shadow(0 0 5px currentColor);
-  transition: stroke 180ms linear, filter 180ms linear;
+  filter: none;
+  transition: stroke 180ms linear;
 }
 
 @media (min-width: 1280px) {
