@@ -69,7 +69,7 @@ export function Navbar() {
         <div className="flex h-[4.5rem] items-center justify-between gap-3 overflow-visible">
           <Link
             href="/"
-            onClick={showRouteLoader}
+            onClick={() => { if (pathname !== "/") showRouteLoader(); }}
             className="relative z-10 flex min-w-0 shrink items-center py-1 sm:shrink-0"
             aria-label="Trackify"
           >
@@ -209,7 +209,7 @@ export function Navbar() {
 
 function NavLink({ href, text, active }: { href: string; text: string; active?: boolean }) {
   return (
-    <Link href={href} onClick={showRouteLoader} className={`relative text-sm font-semibold transition-colors group ${active ? "text-primary" : "text-foreground/80 hover:text-primary dark:hover:text-neon-blue"}`}>
+    <Link href={href} onClick={() => { if (!active) showRouteLoader(); }} className={`relative text-sm font-semibold transition-colors group ${active ? "text-primary" : "text-foreground/80 hover:text-primary dark:hover:text-neon-blue"}`}>
       {text}
       <span className={`absolute -bottom-1 right-0 h-0.5 bg-primary dark:bg-neon-blue transition-all ${active ? "w-full" : "w-0 group-hover:w-full"}`}></span>
     </Link>
@@ -217,8 +217,9 @@ function NavLink({ href, text, active }: { href: string; text: string; active?: 
 }
 
 function MobileNavLink({ href, text, onClick }: { href: string; text: string; onClick: () => void }) {
+  const pathname = usePathname();
   return (
-    <Link href={href} onClick={() => { showRouteLoader(); onClick(); }} className="block rounded-xl px-4 py-3 text-base font-bold hover:bg-secondary">
+    <Link href={href} onClick={() => { if (pathname !== href) showRouteLoader(); onClick(); }} className="block rounded-xl px-4 py-3 text-base font-bold hover:bg-secondary">
       {text}
     </Link>
   );
