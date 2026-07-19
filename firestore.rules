@@ -37,42 +37,30 @@ service cloud.firestore {
     // Targets Collection
     match /targets/{targetId} {
       allow get, list: if true;
-      allow create: if isValidId(targetId) && isValidTargetInit(incoming());
-      allow update: if true;
-      allow delete: if isAdmin();
+      allow create, update, delete: if false; // Server APIs use Firebase Admin.
     }
 
     match /targetStats/{statId} {
       allow get, list: if true;
-      allow create, update: if true;
-      allow delete: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     match /mergeAudit/{auditId} {
       allow get, list: if true;
-      allow create: if isValidId(auditId);
+      allow create: if false;
       allow update, delete: if false;
     }
 
     // Reports Collection
     match /reports/{reportId} {
       allow get, list: if true;
-      allow create: if isValidId(reportId)
-        && isValidId(reportId)
-        && isValidReportInit(incoming())
-        && incoming().authorId is string
-        && incoming().authorId.size() > 0;
-      allow update: if true;
-      allow delete: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     // Notifications Collection
     match /notifications/{notificationId} {
       allow get, list: if true;
-      allow create: if isValidId(notificationId)
-        && isValidId(notificationId)
-        && incoming().userId is string
-        && incoming().userId.size() > 0;
+      allow create: if false;
       allow update, delete: if false;
     }
 
@@ -85,32 +73,19 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       allow read: if true;
-      allow write: if true; // Keep profile sync working with current auth architecture
+      allow write: if false;
     }
 
     // Site visit logs (written via server route + client-backed rules)
     match /visitorLogs/{logId} {
-      allow get, list: if true;
-      allow create: if isValidId(logId)
-        && incoming().path is string
-        && incoming().path.size() > 0
-        && incoming().path.size() <= 512
-        && incoming().createdAt is number;
-      allow update, delete: if isAdmin();
+      allow get, list: if false;
+      allow create, update, delete: if false;
     }
 
     // IP blocks (middleware checks via REST; dashboard writes from trusted admin session)
     match /blockedIps/{blockId} {
-      allow get, list: if true;
-      allow create: if isAdmin()
-        && isValidId(blockId)
-        && incoming().keys().hasAll(['ip', 'createdAt'])
-        && incoming().ip is string
-        && incoming().ip.size() > 0
-        && incoming().ip.size() <= 64
-        && incoming().createdAt is number;
-      allow update: if false;
-      allow delete: if isAdmin();
+      allow get, list: if false;
+      allow create, update, delete: if false;
     }
   }
 }

@@ -103,6 +103,44 @@ const INSTAPAY_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/2/20/I
 
 const emptyLink: TargetLink = { platform: "facebook", url: "" };
 
+async function patchReportOnServer(reportId: string, payload: Record<string, unknown>) {
+  const response = await fetch(`/api/reports/${encodeURIComponent(reportId)}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("report_update_failed");
+}
+
+async function deleteReportOnServer(reportId: string) {
+  const response = await fetch(`/api/reports/${encodeURIComponent(reportId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("report_delete_failed");
+}
+
+async function saveTargetOnServer(targetId: string, payload: Record<string, unknown>) {
+  const response = await fetch(`/api/admin/targets/${encodeURIComponent(targetId)}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("target_save_failed");
+}
+
+async function deleteTargetOnServer(targetId: string) {
+  const response = await fetch(`/api/admin/targets/${encodeURIComponent(targetId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("target_delete_failed");
+}
+
+async function setBlockedIpOnServer(id: string, ip: string, method: "PUT" | "DELETE") {
+  const response = await fetch(`/api/admin/blocked-ips/${encodeURIComponent(id)}`, {
+    method, headers: { "Content-Type": "application/json" }, body: method === "PUT" ? JSON.stringify({ ip }) : undefined,
+  });
+  if (!response.ok) throw new Error("blocked_ip_update_failed");
+}
+
+async function createAdminReportOnServer(payload: Record<string, unknown>) {
+  const response = await fetch("/api/reports/create", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, adminDirect: true }),
+  });
+  if (!response.ok) throw new Error("report_create_failed");
+}
+
 export default function DashboardPage() {
   const { lang } = useLanguage();
   const { user, loading } = useContext(AuthContext);
@@ -230,6 +268,12 @@ export default function DashboardPage() {
       return hay.includes(q);
     });
   }, [allSiteReports, allReportsSearch, targetNameById]);
+  const visitorStats = useMemo(() => {
+    const uniqueVisitors = new Set(visitorLogs.map((row) => String(row.userId || row.clientIp || row.id))).size;
+    const signedIn = new Set(visitorLogs.filter((row) => row.userId).map((row) => String(row.userId))).size;
+    const cities = new Set(visitorLogs.map((row) => String(row.city || "")).filter(Boolean)).size;
+    return { uniqueVisitors, signedIn, guests: Math.max(0, uniqueVisitors - signedIn), cities };
+  }, [visitorLogs]);
   const cleanPhones = useMemo(() => phones.map((phone) => phone.trim()).filter(Boolean), [phones]);
   const cleanLinks = useMemo(
     () => links.map((link) => ({ ...link, url: link.url.trim() })).filter((link) => link.url),
@@ -440,11 +484,11 @@ export default function DashboardPage() {
   const fetchVisitorData = async () => {
     setVisitorLogsLoading(true);
     try {
-      const logsSnap = await getDocs(query(collection(db, "visitorLogs"), orderBy("createdAt", "desc"), limit(400)));
-      setVisitorLogs(logsSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
-      const blockedSnap = await getDocs(collection(db, "blockedIps"));
-      const blocked = blockedSnap.docs
-        .map((item) => ({ id: item.id, ...(item.data() as Record<string, unknown>) } as { id: string; ip?: string; createdAt?: number }))
+      const response = await fetch("/api/visitor-logs", { cache: "no-store" });
+      const payload = (await response.json()) as { logs?: any[]; blocked?: Array<{ id: string; ip?: string; createdAt?: number }> };
+      if (!response.ok) throw new Error("visitor_logs_failed");
+      setVisitorLogs(payload.logs || []);
+      const blocked = (payload.blocked || [])
         .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
       setBlockedIpRows(blocked as { id: string; ip?: string; createdAt?: number }[]);
     } catch (error) {
@@ -492,7 +536,7 @@ export default function DashboardPage() {
     setSavingPendingBodyId(reportId);
     setErrorMsg("");
     try {
-      await updateDoc(doc(db, "reports", reportId), {
+      await patchReportOnServer(reportId, {
         description: draft.description.trim(),
         reporterName: draft.reporterName.trim(),
         targetName: draft.targetName.trim(),
@@ -514,7 +558,7 @@ export default function DashboardPage() {
     setDeletingPendingId(reportId);
     setErrorMsg("");
     try {
-      await deleteDoc(doc(db, "reports", reportId));
+      await deleteReportOnServer(reportId);
       setSuccessMsg(lang === "ar" ? "تم حذف البلاغ." : "Report deleted.");
       await fetchPendingReports();
     } catch (error) {
@@ -531,7 +575,7 @@ export default function DashboardPage() {
     setSavingAllReportId(reportId);
     setErrorMsg("");
     try {
-      await updateDoc(doc(db, "reports", reportId), {
+      await patchReportOnServer(reportId, {
         description: draft.description.trim(),
         reporterName: draft.reporterName.trim(),
         targetName: draft.targetName.trim(),
@@ -557,7 +601,7 @@ export default function DashboardPage() {
     setDeletingAllReportId(reportId);
     setErrorMsg("");
     try {
-      await deleteDoc(doc(db, "reports", reportId));
+      await deleteReportOnServer(reportId);
       setSuccessMsg(lang === "ar" ? "تم حذف البلاغ." : "Report deleted.");
       await fetchAllSiteReports();
       if (targetId) await fetchApprovedReportsForTarget(targetId);
@@ -580,10 +624,7 @@ export default function DashboardPage() {
     setBlockingIpBusy(trimmed);
     setErrorMsg("");
     try {
-      await setDoc(doc(db, "blockedIps", docId), {
-        ip: trimmed,
-        createdAt: Date.now(),
-      });
+      await setBlockedIpOnServer(docId, trimmed, "PUT");
       setSuccessMsg(lang === "ar" ? "تم حظر عنوان الـ IP." : "IP address blocked.");
       await fetchVisitorData();
     } catch (error) {
@@ -598,7 +639,7 @@ export default function DashboardPage() {
     setBlockingIpBusy(rowId);
     setErrorMsg("");
     try {
-      await deleteDoc(doc(db, "blockedIps", rowId));
+      await setBlockedIpOnServer(rowId, "", "DELETE");
       setSuccessMsg(lang === "ar" ? "تم إلغاء حظر الـ IP." : "IP unblocked.");
       await fetchVisitorData();
     } catch (error) {
@@ -652,32 +693,23 @@ export default function DashboardPage() {
         createdAt: baseData?.createdAt,
       });
 
-      await setDoc(doc(db, "targets", targetId), payload, { merge: true });
       const evidenceTier = classifyEvidenceTier(
         Array.isArray(report.evidenceImages) ? report.evidenceImages.length : 0,
         String(report.description || "")
       );
-      await updateDoc(doc(db, "reports", report.id), {
-        status: "approved",
-        targetId,
-        allowUserEdit: report.allowUserEdit === true,
-        editRequestPending: false,
-        adminComment: reportAdminDrafts[report.id]?.adminComment || "",
-        adminVerified: reportAdminDrafts[report.id]?.adminVerified === true,
-        adminPinned: reportAdminDrafts[report.id]?.adminPinned === true,
-        evidenceTier,
-        reviewedAt: Date.now(),
+      const reviewResponse = await fetch(`/api/admin/reports/${encodeURIComponent(report.id)}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "approve", targetId, targetPayload: payload,
+          allowUserEdit: report.allowUserEdit === true,
+          adminComment: reportAdminDrafts[report.id]?.adminComment || "",
+          adminVerified: reportAdminDrafts[report.id]?.adminVerified === true,
+          adminPinned: reportAdminDrafts[report.id]?.adminPinned === true,
+          evidenceTier,
+        }),
       });
-      await syncTargetStats(db, targetId);
-      await addDoc(collection(db, "notifications"), {
-        userId: report.authorId,
-        reportId: report.id,
-        status: "approved",
-        title: "Report approved",
-        message: "Your report has been approved and added to the target records.",
-        read: false,
-        createdAt: Date.now(),
-      });
+      if (!reviewResponse.ok) throw new Error("review_failed");
       setSuccessMsg(lang === "ar" ? "تم اعتماد البلاغ وإضافته للهدف." : "Report approved and linked to target.");
       await fetchPendingReports();
       await fetchTargets();
@@ -690,19 +722,12 @@ export default function DashboardPage() {
   const rejectReport = async (report: any) => {
     try {
       setErrorMsg("");
-      await updateDoc(doc(db, "reports", report.id), {
-        status: "rejected",
-        reviewedAt: Date.now(),
+      const reviewResponse = await fetch(`/api/admin/reports/${encodeURIComponent(report.id)}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject" }),
       });
-      await addDoc(collection(db, "notifications"), {
-        userId: report.authorId,
-        reportId: report.id,
-        status: "rejected",
-        title: "Report rejected",
-        message: "Your report was reviewed and rejected.",
-        read: false,
-        createdAt: Date.now(),
-      });
+      if (!reviewResponse.ok) throw new Error("review_failed");
       setSuccessMsg(lang === "ar" ? "تم رفض البلاغ." : "Report rejected.");
       await fetchPendingReports();
     } catch (error) {
@@ -716,7 +741,7 @@ export default function DashboardPage() {
     if (!draft) return;
     try {
       setSavingApprovedId(reportId);
-      await updateDoc(doc(db, "reports", reportId), {
+      await patchReportOnServer(reportId, {
         adminComment: draft.adminComment,
         adminVerified: draft.adminVerified,
         adminPinned: draft.adminPinned,
@@ -812,10 +837,10 @@ export default function DashboardPage() {
         claimedByUserId: String(baseData?.claimedByUserId || ""),
         createdAt: baseData?.createdAt,
       });
-      await setDoc(doc(db, "targets", resolvedTargetId), nextTargetPayload, { merge: true });
+      await saveTargetOnServer(resolvedTargetId, nextTargetPayload);
 
       const manualEvidenceTier = classifyEvidenceTier(uploadedImageUrls.length, manualDescription.trim());
-      await addDoc(collection(db, "reports"), {
+      await createAdminReportOnServer({
         targetId: resolvedTargetId,
         authorId: user.uid,
         authorEmail: user.email || "",
@@ -835,7 +860,6 @@ export default function DashboardPage() {
         createdAt: Date.now(),
         reviewedAt: Date.now(),
       });
-      await syncTargetStats(db, resolvedTargetId);
 
       manualImagePreviews.forEach((url) => URL.revokeObjectURL(url));
       setManualCustomerName("");
@@ -989,8 +1013,7 @@ export default function DashboardPage() {
     setSuccessMsg("");
 
     try {
-      await deleteDoc(doc(db, "targets", targetId));
-      await deleteDoc(doc(db, "targetStats", targetId)).catch(() => undefined);
+      await deleteTargetOnServer(targetId);
       const deletedId = targetId;
       resetForm();
       setApprovedReports([]);
@@ -1026,7 +1049,10 @@ export default function DashboardPage() {
     setMergeBusy(true);
     setErrorMsg("");
     try {
-      const result = await mergeDuplicateTargetIntoCanonical(db, canonical, duplicate, { actorId: user.uid });
+      const response = await fetch("/api/admin/maintenance", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "merge", canonicalId: canonical, duplicateId: duplicate }) });
+      const result = (await response.json()) as { reportsMoved?: number; error?: string };
+      if (!response.ok) throw new Error(result.error || "merge_failed");
       setSuccessMsg(
         lang === "ar"
           ? `تم الدمج: نُقل ${result.reportsMoved} بلاغ إلى ${canonical}.`
@@ -1055,11 +1081,11 @@ export default function DashboardPage() {
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      const snapshot = await getDocs(collection(db, "targets"));
-      const ids = snapshot.docs.map((item) => item.id);
-      for (const id of ids) {
-        await syncTargetStats(db, id);
-      }
+      const response = await fetch("/api/admin/maintenance", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync_all" }) });
+      const result = (await response.json()) as { count?: number; error?: string };
+      if (!response.ok) throw new Error(result.error || "sync_failed");
+      const ids = Array.from({ length: Number(result.count || 0) });
       await fetchTargets();
       setSuccessMsg(
         lang === "ar"
@@ -1111,8 +1137,7 @@ export default function DashboardPage() {
         createdAt,
       });
 
-      await setDoc(doc(db, "targets", id), payload, { merge: isEditing });
-      await syncTargetStats(db, id);
+      await saveTargetOnServer(id, payload);
       setTargetId(id);
       setCreatedAt(payload.createdAt);
       setSuccessMsg(isEditing ? (lang === "ar" ? "تم تعديل بيانات الصفحة بنجاح." : "Target updated successfully.") : (lang === "ar" ? "تمت إضافة الصفحة بنجاح." : "Target created successfully."));
@@ -2087,14 +2112,29 @@ export default function DashboardPage() {
                         {lang === "ar" ? "تحديث" : "Refresh"}
                       </button>
                     </div>
+                    <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                      {[
+                        [lang === "ar" ? "زيارات مسجلة" : "Visits", visitorLogs.length],
+                        [lang === "ar" ? "زوار مميزون" : "Unique visitors", visitorStats.uniqueVisitors],
+                        [lang === "ar" ? "مستخدمون مسجلون" : "Signed-in users", visitorStats.signedIn],
+                        [lang === "ar" ? "مدن" : "Cities", visitorStats.cities],
+                      ].map(([label, value]) => (
+                        <div key={String(label)} className="rounded-2xl border border-border bg-background/60 p-3">
+                          <p className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">{label}</p>
+                          <p className="mt-1 text-2xl font-black text-primary">{String(value)}</p>
+                        </div>
+                      ))}
+                    </div>
                     <div className="overflow-x-auto rounded-xl border border-border">
-                      <table className="w-full min-w-[720px] text-left text-sm">
+                      <table className="w-full min-w-[980px] text-left text-sm">
                         <thead className="border-b border-border bg-secondary/40 text-xs font-black uppercase text-muted-foreground">
                           <tr>
                             <th className="px-3 py-2">{lang === "ar" ? "الوقت" : "Time"}</th>
                             <th className="px-3 py-2">IP</th>
+                            <th className="px-3 py-2">{lang === "ar" ? "الموقع التقريبي" : "Approx. location"}</th>
                             <th className="px-3 py-2">{lang === "ar" ? "المسار" : "Path"}</th>
                             <th className="px-3 py-2">{lang === "ar" ? "الإيميل" : "Email"}</th>
+                            <th className="px-3 py-2">{lang === "ar" ? "الجهاز" : "Device"}</th>
                             <th className="px-3 py-2">{lang === "ar" ? "إجراء" : "Action"}</th>
                           </tr>
                         </thead>
@@ -2105,8 +2145,10 @@ export default function DashboardPage() {
                                 {row.createdAt ? new Date(row.createdAt).toLocaleString(lang === "ar" ? "ar-EG" : "en-US") : "â€”"}
                               </td>
                               <td className="px-3 py-2 font-mono text-xs" dir="ltr">{row.clientIp || "â€”"}</td>
+                              <td className="px-3 py-2 text-xs">{[row.city, row.region, row.country].filter(Boolean).join(", ") || "—"}</td>
                               <td className="px-3 py-2 text-xs break-all" dir="ltr">{row.path || "â€”"}</td>
                               <td className="px-3 py-2 text-xs break-all" dir="ltr">{row.email || row.userId || "â€”"}</td>
+                              <td className="max-w-[220px] truncate px-3 py-2 text-[11px] text-muted-foreground" dir="ltr" title={row.userAgent || ""}>{row.userAgent || "—"}</td>
                               <td className="px-3 py-2">
                                 {row.clientIp ? (
                                   <button

@@ -9,7 +9,7 @@ import { useLanguage } from "@/lib/i18n/context";
 import { reloadWithRouteLoader, showRouteLoader } from "@/components/RouteLoadingController";
 import Link from "next/link";
 import { getAvatarUrl } from "@/lib/avatar";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 
 export function Navbar() {
@@ -17,6 +17,7 @@ export function Navbar() {
   const { user, loading } = useContext(AuthContext);
   const { lang, toggleLang, t } = useLanguage();
   const router = useRouter();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const logoSrc =
@@ -65,7 +66,7 @@ export function Navbar() {
   return (
     <nav className="fixed inset-x-0 top-0 z-50 glass-panel border-b border-white/10 dark:border-white/5 transition-all duration-300 overflow-visible">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-3 overflow-visible">
+        <div className="flex h-[4.5rem] items-center justify-between gap-3 overflow-visible">
           <Link
             href="/"
             onClick={showRouteLoader}
@@ -75,16 +76,16 @@ export function Navbar() {
             <img
               src={logoSrc}
               alt="Trackify Logo"
-              className="h-auto w-[138px] object-contain min-[380px]:w-[152px] sm:w-[210px] md:w-[230px] lg:w-[255px]"
+              className="h-auto w-[155px] max-w-none translate-y-1 object-contain min-[380px]:w-[175px] sm:w-[220px] md:w-[245px] lg:w-[270px]"
             />
           </Link>
 
           <div className="hidden md:flex items-center gap-6">
-            <NavLink href="/" text={t("navbar.home", "Home")} />
-            <NavLink href="/report" text={t("navbar.report", "Rate & Share")} />
-            <NavLink href="/category" text={t("navbar.category", "Categories")} />
-            <NavLink href="/trending" text={t("navbar.trending", "Trending")} />
-            <NavLink href="/about" text={t("navbar.about", "About")} />
+            <NavLink href="/" active={pathname === "/"} text={t("navbar.home", "Home")} />
+            <NavLink href="/report" active={pathname.startsWith("/report")} text={t("navbar.report", "Rate & Share")} />
+            <NavLink href="/category" active={pathname.startsWith("/category")} text={t("navbar.category", "Categories")} />
+            <NavLink href="/trending" active={pathname.startsWith("/trending")} text={t("navbar.trending", "Trending")} />
+            <NavLink href="/about" active={pathname.startsWith("/about")} text={t("navbar.about", "About")} />
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -206,11 +207,11 @@ export function Navbar() {
   );
 }
 
-function NavLink({ href, text }: { href: string; text: string }) {
+function NavLink({ href, text, active }: { href: string; text: string; active?: boolean }) {
   return (
-    <Link href={href} onClick={showRouteLoader} className="text-sm font-semibold text-foreground/80 hover:text-primary dark:hover:text-neon-blue transition-colors relative group">
+    <Link href={href} onClick={showRouteLoader} className={`relative text-sm font-semibold transition-colors group ${active ? "text-primary" : "text-foreground/80 hover:text-primary dark:hover:text-neon-blue"}`}>
       {text}
-      <span className="absolute -bottom-1 right-0 w-0 h-0.5 bg-primary dark:bg-neon-blue transition-all group-hover:w-full"></span>
+      <span className={`absolute -bottom-1 right-0 h-0.5 bg-primary dark:bg-neon-blue transition-all ${active ? "w-full" : "w-0 group-hover:w-full"}`}></span>
     </Link>
   );
 }

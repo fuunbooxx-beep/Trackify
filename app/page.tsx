@@ -3,18 +3,17 @@
 import { Navbar } from "@/components/Navbar";
 import { Hero } from "@/components/Hero";
 import { Particles } from "@/components/Particles";
-import { ShieldCheck, AlertTriangle, Users } from "lucide-react";
+import { ShieldCheck, AlertTriangle, FileCheck2, SearchCheck, FileWarning, ArrowUpRight } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 import { motion } from "motion/react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getCountFromServer, query, where } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import { db } from "@/lib/firebase";
-import type { TargetRecord } from "@/lib/target-utils";
 
 type HomeStats = {
   trustedSellers: number;
   scammersDetected: number;
-  activeUsers: number;
+  totalReports: number;
 };
 
 export default function Home() {
@@ -22,7 +21,7 @@ export default function Home() {
   const [stats, setStats] = useState<HomeStats>({
     trustedSellers: 0,
     scammersDetected: 0,
-    activeUsers: 0,
+    totalReports: 0,
   });
 
   useEffect(() => {
@@ -30,18 +29,17 @@ export default function Home() {
 
     const fetchHomeStats = async () => {
       try {
-        const snapshot = await getDocs(collection(db, "targets"));
-        const targets = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as TargetRecord));
-
-        const trustedSellers = targets.filter((target) => String(target.status || "").toLowerCase() === "trusted").length;
-        const scammersDetected = targets.filter((target) => String(target.status || "").toLowerCase() === "high_risk").length;
-        const activeUsers = targets.reduce((sum, target) => sum + Number(target.reportCount || 0), 0);
+        const [trustedSnapshot, riskySnapshot, reportsSnapshot] = await Promise.all([
+          getCountFromServer(query(collection(db, "targets"), where("status", "==", "trusted"))),
+          getCountFromServer(query(collection(db, "targets"), where("status", "==", "high_risk"))),
+          getCountFromServer(query(collection(db, "reports"), where("status", "==", "approved"))),
+        ]);
 
         if (alive) {
           setStats({
-            trustedSellers,
-            scammersDetected,
-            activeUsers,
+            trustedSellers: trustedSnapshot.data().count,
+            scammersDetected: riskySnapshot.data().count,
+            totalReports: reportsSnapshot.data().count,
           });
         }
       } catch (error) {
@@ -61,9 +59,9 @@ export default function Home() {
     () => ({
       trustedSellers: stats.trustedSellers.toLocaleString(numberLocale),
       scammersDetected: stats.scammersDetected.toLocaleString(numberLocale),
-      activeUsers: stats.activeUsers.toLocaleString(numberLocale),
+      totalReports: stats.totalReports.toLocaleString(numberLocale),
     }),
-    [numberLocale, stats.activeUsers, stats.scammersDetected, stats.trustedSellers]
+    [numberLocale, stats.totalReports, stats.scammersDetected, stats.trustedSellers]
   );
 
   return (
@@ -101,9 +99,9 @@ export default function Home() {
                 accent="red"
               />
               <StatCard 
-                icon={<Users className="h-10 w-10 sm:h-12 sm:w-12" />}
-                number={formattedStats.activeUsers}
-                label={lang === "ar" ? "مستخدم نشط" : "Active Users"}
+                icon={<FileCheck2 className="h-10 w-10 sm:h-12 sm:w-12" />}
+                number={formattedStats.totalReports}
+                label={lang === "ar" ? "بلاغ معتمد" : "Approved Reports"}
                 accent="yellow"
               />
             </motion.div>
@@ -194,6 +192,38 @@ export default function Home() {
               </p>
             </motion.div>
           </motion.div>
+        </section>
+
+        <section className="border-y border-border/60 bg-card/40 px-4 py-16 sm:py-24">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-10 max-w-2xl">
+              <p className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-primary">{lang === "ar" ? "ثلاث خطوات بسيطة" : "Three simple steps"}</p>
+              <h2 className="text-3xl font-black tracking-tight sm:text-5xl">{lang === "ar" ? "اتأكد قبل ما تدفع" : "Confidence before every payment"}</h2>
+              <p className="mt-4 text-base leading-7 text-muted-foreground sm:text-lg">{lang === "ar" ? "اعرف مين قدامك، شوف الدليل، وخد قرارك على أساس تجارب حقيقية." : "Know who you are dealing with, inspect the evidence, and decide with real experiences."}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {[
+                { icon: SearchCheck, n: "01", en: "Search the seller", ar: "ابحث عن البائع", copyEn: "Use a phone, page name, or link.", copyAr: "استخدم رقم الهاتف أو اسم الصفحة أو الرابط." },
+                { icon: FileWarning, n: "02", en: "Read the signals", ar: "اقرأ مؤشرات الثقة", copyEn: "See score, reports, dates, and evidence.", copyAr: "شوف التقييم والبلاغات والتواريخ والأدلة." },
+                { icon: ShieldCheck, n: "03", en: "Pay with clarity", ar: "ادفع وأنت مطمن", copyEn: "If something feels wrong, report it.", copyAr: "لو حصلت مشكلة، شارك تجربتك واحمِ غيرك." },
+              ].map(({ icon: Icon, n, en, ar, copyEn, copyAr }) => (
+                <div key={n} className="group rounded-3xl border border-border bg-background/70 p-6 transition hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl sm:p-8">
+                  <div className="mb-8 flex items-center justify-between"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary/15 text-primary"><Icon className="h-5 w-5" /></span><span className="font-mono text-sm font-black text-muted-foreground/60">{n}</span></div>
+                  <h3 className="text-xl font-black">{lang === "ar" ? ar : en}</h3>
+                  <p className="mt-3 leading-7 text-muted-foreground">{lang === "ar" ? copyAr : copyEn}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto grid max-w-6xl gap-6 px-4 py-16 sm:py-24 lg:grid-cols-[1.1fr_.9fr]">
+          <div className="rounded-[2rem] border border-red-500/20 bg-red-500/[.04] p-7 sm:p-10">
+            <div className="mb-7 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[.18em] text-red-500">{lang === "ar" ? "تنبيهات حديثة" : "Recent alerts"}</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">{lang === "ar" ? "اعرف المخاطر قبل غيرك" : "See the risk signals early"}</h2></div><FileWarning className="h-8 w-8 text-red-500" /></div>
+            <div className="space-y-3"><div className="flex items-center justify-between rounded-2xl border border-red-500/15 bg-background/70 p-4"><span className="font-bold">{lang === "ar" ? "صفحات تحت المراجعة" : "Targets under review"}</span><span className="rounded-full bg-red-500/10 px-3 py-1 text-xs font-black text-red-500">{lang === "ar" ? "تحقق" : "Check"}</span></div><div className="flex items-center justify-between rounded-2xl border border-border bg-background/70 p-4"><span className="font-bold">{lang === "ar" ? "شوف قائمة الترند" : "Browse the live trend list"}</span><ArrowUpRight className="h-4 w-4 text-muted-foreground" /></div></div>
+            <a href="/trending" className="mt-6 inline-flex items-center gap-2 text-sm font-black text-red-500 hover:underline">{lang === "ar" ? "عرض كل التنبيهات" : "View all alerts"}<ArrowUpRight className="h-4 w-4" /></a>
+          </div>
+          <div className="flex flex-col justify-between rounded-[2rem] bg-primary p-7 text-primary-foreground sm:p-10"><div><p className="text-xs font-black uppercase tracking-[.18em] opacity-70">{lang === "ar" ? "ساعد المجتمع" : "Help the community"}</p><h2 className="mt-3 text-3xl font-black sm:text-4xl">{lang === "ar" ? "تجربتك ممكن تحمي حد" : "Your experience can protect someone"}</h2><p className="mt-4 max-w-md leading-7 opacity-80">{lang === "ar" ? "كل بلاغ موثق بيخلي قرار الشراء أوضح للاعبين في مصر." : "Every verified report makes the next gaming deal safer."}</p></div><a href="/report" className="mt-10 inline-flex w-fit items-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-black text-white transition hover:bg-black/80">{lang === "ar" ? "شارك تجربتك" : "Share your experience"}<ArrowUpRight className="h-4 w-4" /></a></div>
         </section>
       </main>
 

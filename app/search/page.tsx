@@ -17,15 +17,21 @@ import {
   normalizeTargetCategory,
   type TargetRecord,
 } from "@/lib/target-utils";
-import { scoreTarget } from "@/lib/target-search-score";
+import { getTargetMatchReasons, scoreTarget } from "@/lib/target-search-score";
 
 type ScoredTarget = TargetRecord & { id: string; searchScore: number };
+type ExplainedTarget = ScoredTarget & { matchReasons: string[] };
+
+function normalizeSearchDisplay(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
 
 function SearchContent() {
   const searchParams = useSearchParams();
   const q = searchParams.get("q") || "";
   const [loading, setLoading] = useState(true);
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<ExplainedTarget[]>([]);
+  const [suggestion, setSuggestion] = useState<ScoredTarget | null>(null);
   const { lang } = useLanguage();
 
   useEffect(() => {
@@ -33,24 +39,26 @@ function SearchContent() {
       setLoading(true);
       if (!q.trim()) {
         setResults([]);
+        setSuggestion(null);
         setLoading(false);
         return;
       }
       
       try {
         const snapshot = await getDocs(collection(db, "targets"));
-        const data = snapshot.docs
+        const ranked = snapshot.docs
           .map((item) => ({ id: item.id, ...item.data() } as TargetRecord & { id: string }))
           .map((target) => ({ ...target, searchScore: scoreTarget(q, target) }))
-          .filter((target): target is ScoredTarget => target.searchScore > 0)
           .sort((a, b) => {
             if (b.searchScore !== a.searchScore) return b.searchScore - a.searchScore;
             const reportsDifference = Number(b.reportCount || 0) - Number(a.reportCount || 0);
             if (reportsDifference !== 0) return reportsDifference;
             return String(a.name || "").localeCompare(String(b.name || ""));
           });
-
-        setResults(data);
+        setResults(ranked.filter((target): target is ScoredTarget => target.searchScore >= 76).slice(0, 8).map((target) => ({
+          ...target, matchReasons: getTargetMatchReasons(q, target),
+        })));
+        setSuggestion(ranked.find((target): target is ScoredTarget => target.searchScore >= 55 && target.searchScore < 76) || null);
       } catch (error) {
         console.error(error);
         setResults([]);
@@ -72,10 +80,12 @@ function SearchContent() {
       <div className="mb-12">
         <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
           <SearchIcon className="w-8 h-8 text-primary dark:text-neon-blue" />
-          <span>{lang === "ar" ? `نتائج البحث عن "${q}"` : `Search results for "${q}"`}</span>
+          <span>{lang === "ar" ? `نتائج البحث عن "${normalizeSearchDisplay(q)}"` : `Search results for "${normalizeSearchDisplay(q)}"`}</span>
         </h1>
         <p className="text-muted-foreground font-medium">
-          {lang === "ar" ? `تم العثور على ${results.length} نتيجة مطابقة.` : `${results.length} matching results found.`}
+          {results.length > 0
+            ? (lang === "ar" ? `أقوى ${results.length} نتيجة مطابقة.` : `${results.length} strongest matches.`)
+            : (lang === "ar" ? "لم نجد تطابقًا قويًا بهذا الاسم." : "No strong match found for this search.")}
         </p>
       </div>
 
@@ -104,6 +114,14 @@ function SearchContent() {
           <p className="text-muted-foreground mb-8 max-w-md mx-auto">
             {lang === "ar" ? "مفيش أي بيانات أو بلاغات عن الرقم أو الصفحة دي حاليا. لو اتنصب عليك منهم، ياريت تقدم بلاغ وتساعد غيرك." : "No reports are currently linked to this number or page. If you were scammed by them, submit a report to help others."}
           </p>
+          {suggestion ? (
+            <div className="mx-auto mb-6 max-w-md rounded-2xl border border-primary/30 bg-primary/10 p-4 text-start">
+              <p className="text-xs font-black uppercase tracking-wider text-primary">{lang === "ar" ? "هل تقصد؟" : "Did you mean?"}</p>
+              <Link href={`/search?q=${encodeURIComponent(String(suggestion.name || ""))}`} className="mt-1 block text-lg font-black hover:underline">
+                {suggestion.name}
+              </Link>
+            </div>
+          ) : null}
           <Link href={`/report?target=${encodeURIComponent(q)}`} className="inline-flex items-center gap-2 bg-primary dark:bg-neon-blue text-white dark:text-black font-bold px-6 py-3 rounded-xl hover:scale-105 transition-transform shadow-[0_0_15px_rgba(37,99,235,0.3)] dark:shadow-[0_0_15px_rgba(0,243,255,0.3)]">
             <AlertTriangle className="w-5 h-5" />
             <span>{lang === "ar" ? "قدم بلاغ عن الصفحة دي" : "Submit a report about this page"}</span>
@@ -184,6 +202,16 @@ function TargetCard({ target }: { target: any }) {
                 <span dir="ltr">{hostFromUrl(target.link)}</span>
               </span>
             )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">{lang === "ar" ? "سبب المطابقة:" : "Matched by:"}</span>
+            {(target.matchReasons || []).map((reason: string) => (
+              <span key={reason} className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">
+                {lang === "ar"
+                  ? ({ exact_name: "الاسم بالكامل", name_words: "كلمات الاسم", phone: "نفس رقم الهاتف", link: "نفس الرابط", close_name: "اسم قريب" } as Record<string, string>)[reason] || reason
+                  : ({ exact_name: "Exact name", name_words: "Name words", phone: "Same phone", link: "Same link", close_name: "Close name" } as Record<string, string>)[reason] || reason}
+              </span>
+            ))}
           </div>
         </div>
         

@@ -55,7 +55,9 @@ export function calculateTrustMetrics(reports: ReportForScore[]) {
 
   if (approvedReports === 0) {
     return {
-      trustScore: 50,
+      // Zero is a storage-safe sentinel here. The UI must present `no_data`
+      // instead of implying that an unreviewed target has a 50/100 score.
+      trustScore: 0,
       status: "no_data" as const,
       reportCount: 0,
       stats: {

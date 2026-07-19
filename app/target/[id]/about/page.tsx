@@ -141,15 +141,18 @@ export default function TargetAboutPage() {
       const uploaded = await uploadImagesThroughApi(`${user.uid}_target_about_${resolvedTargetId}`, aboutFiles);
       const mergedEvidence = Array.from(new Set([...(evidenceImages || []), ...uploaded])).slice(0, 10);
 
-      await updateDoc(doc(db, "targets", resolvedTargetId), {
-        about: {
+      const saveResponse = await fetch(`/api/admin/targets/${encodeURIComponent(resolvedTargetId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...target, name: target?.name || resolvedTargetId, about: {
           title: aboutTitle.trim(),
           description: aboutDescription.trim(),
           evidenceImages: mergedEvidence,
           addedBy: "admins",
           updatedAt: Date.now(),
-        },
+        } }),
       });
+      if (!saveResponse.ok) throw new Error("target_save_failed");
 
       const snap = await getDoc(doc(db, "targets", resolvedTargetId));
       if (snap.exists()) setTarget({ id: snap.id, ...snap.data() } as TargetRecord);
@@ -366,4 +369,3 @@ export default function TargetAboutPage() {
     </>
   );
 }
-

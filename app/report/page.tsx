@@ -42,6 +42,24 @@ import {
   simpleHash,
 } from "@/lib/report-safety";
 
+async function createPendingReportOnServer(payload: Record<string, unknown>) {
+  const response = await fetch("/api/reports/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const result = (await response.json().catch(() => ({}))) as { ok?: boolean; id?: string; error?: string };
+  if (!response.ok || !result.ok || !result.id) throw new Error(result.error || "report_create_failed");
+  return { id: result.id };
+}
+
+async function saveAdminTargetOnServer(targetId: string, payload: Record<string, unknown>) {
+  const response = await fetch(`/api/admin/targets/${encodeURIComponent(targetId)}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("target_save_failed");
+}
+
 declare global {
   interface Window {
     turnstile?: {
@@ -392,7 +410,7 @@ function ReportContent() {
       if (!linkedToExisting && !adminBypass) {
         const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
         const reportAuthorId = user?.uid || `guest_${Date.now()}`;
-        const reportRef = await addDoc(collection(db, "reports"), {
+        await createPendingReportOnServer({
           targetId: PENDING_REPORT_TARGET_PLACEHOLDER_ID,
           authorId: reportAuthorId,
           authorEmail: user?.email || "",
@@ -419,62 +437,38 @@ function ReportContent() {
           createdAt: Date.now(),
         });
 
-        if (user) {
-          await addDoc(collection(db, "notifications"), {
-            userId: user.uid,
-            reportId: reportRef.id,
-            status: "pending",
-            title: lang === "ar" ? "تم استلام البلاغ للمراجعة" : "Report received for review",
-            message:
-              lang === "ar"
-                ? "هنتحقق من اسم الصفحة والبيانات. لو كل حاجة مظبوطة هيتم إنشاء الهدف ونشر تجربتك."
-                : "We'll verify the page details. If everything checks out, we'll create the target and publish your report.",
-            read: false,
-            createdAt: Date.now(),
-          });
-        }
-
-        await addDoc(collection(db, "notifications"), {
-          userId: "admin_broadcast",
-          audience: "admin",
-          reportId: reportRef.id,
-          status: "pending",
-          title: lang === "ar" ? "بلاغ جديد بحاجة لمراجعة الهدف" : "New report needs target verification",
-          message:
-            lang === "ar"
-              ? `اسم الصفحة المذكورة غير موجود تطابقًا تامًا: "${targetName.trim()}". راجع قائمة البلاغات المعلقة.`
-              : `No exact existing target matched the submitted name "${targetName.trim()}". Review the pending queue.`,
-          read: false,
-          createdAt: Date.now(),
-        });
       } else {
         const existingDoc = linkedToExisting ? bestMatch.target : undefined;
         const baseData = existingDoc as TargetRecord | undefined;
         const resolvedTargetId = existingDoc?.id || `target_${Date.now()}`;
         const idMerge = identityFieldsAfterReportSubmitted(baseData, targetName.trim());
 
-        const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
-        const mergedPayload = targetPayload({
-          name: idMerge.name,
-          aliases: idMerge.aliases,
-          previousNames: baseData ? getTargetPreviousNames(baseData) : [],
-          linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
-          type: String(baseData?.type || "page"),
-          phones: [targetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
-          links: [{ platform: detectPlatform(targetLink.trim()), url: targetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
-          logoUrl: String(baseData?.logoUrl || ""),
-          status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
-          trustScore: Number(baseData?.trustScore ?? 45),
-          reportCount: nextReportCount,
-          reasons: baseData ? getTargetReasons(baseData) : [],
-          claimedByUserId: String(baseData?.claimedByUserId || ""),
-          createdAt: baseData?.createdAt,
-        });
-        await setDoc(doc(db, "targets", resolvedTargetId), mergedPayload, { merge: true });
+        // User submissions must never mutate a public target or its score before
+        // moderation. Admin direct reports may update identity fields immediately.
+        if (adminBypass) {
+          const nextReportCount = Number(baseData?.reportCount ?? 0) + 1;
+          const mergedPayload = targetPayload({
+            name: idMerge.name,
+            aliases: idMerge.aliases,
+            previousNames: baseData ? getTargetPreviousNames(baseData) : [],
+            linkedIdentities: baseData ? getTargetLinkedIdentities(baseData) : [],
+            type: String(baseData?.type || "page"),
+            phones: [targetPhone.trim(), ...(baseData ? getTargetPhones(baseData) : [])],
+            links: [{ platform: detectPlatform(targetLink.trim()), url: targetLink.trim() }, ...(baseData ? getTargetLinks(baseData) : [])],
+            logoUrl: String(baseData?.logoUrl || ""),
+            status: getRiskStatusFromReportCount(nextReportCount, String(baseData?.status || "reviewing")),
+            trustScore: Number(baseData?.trustScore ?? 0),
+            reportCount: nextReportCount,
+            reasons: baseData ? getTargetReasons(baseData) : [],
+            claimedByUserId: String(baseData?.claimedByUserId || ""),
+            createdAt: baseData?.createdAt,
+          });
+          await saveAdminTargetOnServer(resolvedTargetId, mergedPayload);
+        }
 
         const evidenceTier = classifyEvidenceTier(uploadedImageUrls.length, sanitizedDescription);
         const reportAuthorId = user?.uid || `guest_${Date.now()}`;
-        const reportRef = await addDoc(collection(db, "reports"), {
+        await createPendingReportOnServer({
           targetId: resolvedTargetId,
           authorId: reportAuthorId,
           authorEmail: user?.email || "",
@@ -491,7 +485,7 @@ function ReportContent() {
           descriptionHash,
           evidenceImages: uploadedImageUrls,
           evidenceTier,
-          status: "approved",
+          status: adminBypass ? "approved" : "pending",
           adminVerified: isAdmin && reportAsAdmin,
           adminPinned: isAdmin && reportAsAdmin,
           allowUserEdit: false,
@@ -499,23 +493,10 @@ function ReportContent() {
           reviewNote: "",
           source: isAdmin && reportAsAdmin ? "admin_direct" : anonymousMode ? "user_anonymous" : "user",
           createdAt: Date.now(),
-          reviewedAt: Date.now(),
+          reviewedAt: adminBypass ? Date.now() : 0,
+          adminDirect: adminBypass,
         });
 
-        if (!(isAdmin && reportAsAdmin) && user) {
-          await addDoc(collection(db, "notifications"), {
-            userId: user.uid,
-            reportId: reportRef.id,
-            status: "approved",
-            title: lang === "ar" ? "تم نشر البلاغ" : "Report published",
-            message: lang === "ar" ? "تم نشر بلاغك تلقائياً بنجاح." : "Your report has been published automatically.",
-            read: false,
-            createdAt: Date.now(),
-          });
-        }
-        if (resolvedTargetId && resolvedTargetId !== PENDING_REPORT_TARGET_PLACEHOLDER_ID) {
-          await syncTargetStats(db, resolvedTargetId);
-        }
       }
 
       imagePreviews.forEach((url) => URL.revokeObjectURL(url));
@@ -530,7 +511,7 @@ function ReportContent() {
         setTargetLink("");
       }
       setCaptchaToken("");
-      setSuccessKind(linkedToExisting || adminBypass ? "published" : "pending_review");
+      setSuccessKind(adminBypass ? "published" : "pending_review");
       window.requestAnimationFrame(() => {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
       });

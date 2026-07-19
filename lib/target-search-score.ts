@@ -89,14 +89,19 @@ export function scoreTarget(queryText: string, target: TargetRecord) {
   const links = getTargetLinks(target);
 
   let score = 0;
-  score = Math.max(score, fuzzyScore(normalizedQuery, String(target.name || "")));
-  for (const alias of getTargetAliases(target)) {
-    score = Math.max(score, fuzzyScore(normalizedQuery, alias) - 2);
-  }
-  score = Math.max(score, fuzzyScore(normalizedQuery, String(target.type || "")) - 20);
-
-  for (const term of terms) {
-    score = Math.max(score, fuzzyScore(normalizedQuery, String(term)) - 4);
+  const identityNames = [String(target.name || ""), ...getTargetAliases(target)];
+  const queryWords = normalizeTargetName(queryText).split(/\s+/).filter((word) => word.length >= 2);
+  for (const identity of identityNames) {
+    const identityNormalized = normalizeTargetName(identity);
+    const identityWords = identityNormalized.split(/\s+/).filter(Boolean);
+    const everyWordMatches = queryWords.length > 1 && queryWords.every((word) =>
+      identityWords.some((candidateWord) => candidateWord === word || candidateWord.startsWith(word) || word.startsWith(candidateWord))
+    );
+    if (everyWordMatches) score = Math.max(score, 94);
+    // Fuzzy matching is intentionally limited to the full identity. This
+    // prevents generic words such as "store" from returning unrelated pages.
+    const identityScore = fuzzyScore(normalizedQuery, identity);
+    if ((queryWords.length <= 1 || everyWordMatches) && identityScore >= 76) score = Math.max(score, identityScore);
   }
 
   if (phoneQuery) {
@@ -115,8 +120,26 @@ export function scoreTarget(queryText: string, target: TargetRecord) {
     }
   }
 
-  const categoryBoost = evaluateTargetCategoryTextMatch(queryText, target, fuzzyScore);
-  if (categoryBoost > 0) score = Math.max(score, categoryBoost);
-
   return score;
+}
+
+export function getTargetMatchReasons(queryText: string, target: TargetRecord) {
+  const reasons: string[] = [];
+  const normalized = normalizeTargetName(queryText);
+  const names = [String(target.name || ""), ...getTargetAliases(target)].map(normalizeTargetName);
+  if (names.some((name) => name === normalized)) reasons.push("exact_name");
+  else if (names.some((name) => {
+    const queryWords = normalized.split(/\s+/).filter(Boolean);
+    const candidateWords = name.split(/\s+/).filter(Boolean);
+    return queryWords.length > 1 && queryWords.every((word) => candidateWords.some((candidate) => candidate === word || candidate.startsWith(word) || word.startsWith(candidate)));
+  })) reasons.push("name_words");
+  const phone = normalizePhone(queryText);
+  if (phone && getTargetPhones(target).some((item) => normalizePhone(item) === phone)) reasons.push("phone");
+  const raw = queryText.trim().toLowerCase();
+  if (/https?:\/\//i.test(raw) || raw.includes(".")) {
+    const url = normalizeUrl(queryText).toLowerCase();
+    if (getTargetLinks(target).some((item) => normalizeUrl(item.url).toLowerCase() === url)) reasons.push("link");
+  }
+  if (!reasons.length) reasons.push("close_name");
+  return reasons;
 }

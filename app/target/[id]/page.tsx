@@ -63,6 +63,25 @@ import { useLanguage } from "@/lib/i18n/context";
 import { getAdminAvatarUrl, getAvatarUrl } from "@/lib/avatar";
 import { classifyEvidenceTier, formatEvidenceTierLabel } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
+
+async function patchReportOnServer(reportId: string, payload: Record<string, unknown>) {
+  const response = await fetch(`/api/reports/${encodeURIComponent(reportId)}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("report_update_failed");
+}
+
+async function deleteReportOnServer(reportId: string) {
+  const response = await fetch(`/api/reports/${encodeURIComponent(reportId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("report_delete_failed");
+}
+
+async function createAdminReportOnServer(payload: Record<string, unknown>) {
+  const response = await fetch("/api/reports/create", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, adminDirect: true }),
+  });
+  if (!response.ok) throw new Error("report_create_failed");
+}
 import {
   BehaviorFlagStrip,
   deriveReportStats,
@@ -368,6 +387,18 @@ export default function TargetDetailsPage() {
   const lastSuccessLabel = target.lastSuccessAt
     ? new Date(target.lastSuccessAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")
     : "—";
+  const evidenceReportCount = reports.filter(
+    (report: any) => Array.isArray(report.evidenceImages) && report.evidenceImages.length > 0
+  ).length;
+  const evidenceCoverage = reportCount > 0 ? Math.min(100, Math.round((evidenceReportCount / reportCount) * 100)) : 0;
+  const confidenceLevel = reportCount >= 10 && evidenceCoverage >= 60
+    ? "high"
+    : reportCount >= 3 && evidenceCoverage >= 30
+      ? "medium"
+      : "low";
+  const confidenceLabel = lang === "ar"
+    ? confidenceLevel === "high" ? "قوة بيانات مرتفعة" : confidenceLevel === "medium" ? "قوة بيانات متوسطة" : "قوة بيانات محدودة"
+    : confidenceLevel === "high" ? "High data confidence" : confidenceLevel === "medium" ? "Medium data confidence" : "Limited data confidence";
 
   const startEdit = (report: any) => {
     setEditingReportId(report.id);
@@ -439,7 +470,7 @@ export default function TargetDetailsPage() {
         patch.allowUserEdit = false;
         patch.editRequestPending = false;
       }
-      await updateDoc(doc(db, "reports", report.id), patch);
+      await patchReportOnServer(report.id, patch);
       await syncTargetStats(db, activeTargetId);
       editNewPreviews.forEach((url) => URL.revokeObjectURL(url));
       setEditNewFiles([]);
@@ -472,18 +503,9 @@ export default function TargetDetailsPage() {
     if (!user || report.authorId !== user.uid) return;
     try {
       setSavingReportId(report.id);
-      await updateDoc(doc(db, "reports", report.id), {
+      await patchReportOnServer(report.id, {
         editRequestPending: true,
         updatedAt: Date.now(),
-      });
-      await addDoc(collection(db, "notifications"), {
-        userId: user.uid,
-        reportId: report.id,
-        status: "edit_requested",
-        title: lang === "ar" ? "تم إرسال طلب تعديل" : "Edit request sent",
-        message: lang === "ar" ? "تم إرسال طلب تعديل البلاغ للإدارة." : "Your report edit request has been sent to admins.",
-        read: false,
-        createdAt: Date.now(),
       });
       await fetchReports();
       setActionMsg(lang === "ar" ? "تم إرسال طلب التعديل للإدارة." : "Edit request sent to admin.");
@@ -499,19 +521,10 @@ export default function TargetDetailsPage() {
     if (!isAdmin) return;
     try {
       setSavingReportId(report.id);
-      await updateDoc(doc(db, "reports", report.id), {
+      await patchReportOnServer(report.id, {
         allowUserEdit: true,
         editRequestPending: false,
         updatedAt: Date.now(),
-      });
-      await addDoc(collection(db, "notifications"), {
-        userId: report.authorId,
-        reportId: report.id,
-        status: "edit_permission_granted",
-        title: lang === "ar" ? "تم السماح بالتعديل" : "Edit permission granted",
-        message: lang === "ar" ? "الإدارة وافقت على تعديل بلاغك." : "Admin approved your request to edit this report.",
-        read: false,
-        createdAt: Date.now(),
       });
       await fetchReports();
       setActionMsg(lang === "ar" ? "تم منح صلاحية التعديل للعميل." : "Customer edit permission granted.");
@@ -535,7 +548,7 @@ export default function TargetDetailsPage() {
     try {
       setDeletingReportId(report.id);
       setActionMsg("");
-      await deleteDoc(doc(db, "reports", report.id));
+      await deleteReportOnServer(report.id);
       await refreshTargetAfterReportChange();
       setActionMsg(lang === "ar" ? "\u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u0643\u0648\u0645\u0646\u062a \u0648\u0625\u0639\u0627\u062f\u0629 \u062d\u0633\u0627\u0628 \u0627\u0644\u062a\u0642\u064a\u064a\u0645." : "Comment deleted and target score recalculated.");
     } catch (error) {
@@ -555,7 +568,7 @@ export default function TargetDetailsPage() {
       setSavingAdminReplyId(report.id);
       setActionMsg("");
       const currentReplies = Array.isArray(report.adminReplies) ? report.adminReplies : [];
-      await updateDoc(doc(db, "reports", report.id), {
+      await patchReportOnServer(report.id, {
         adminReplies: [
           ...currentReplies,
           {
@@ -590,7 +603,7 @@ export default function TargetDetailsPage() {
       setSavingAdminReplyId(report.id);
       setActionMsg("");
       const currentReplies = Array.isArray(report.adminReplies) ? report.adminReplies : [];
-      await updateDoc(doc(db, "reports", report.id), {
+      await patchReportOnServer(report.id, {
         adminReplies: currentReplies.filter((reply: any) => String(reply.id || "") !== replyId),
         updatedAt: Date.now(),
       });
@@ -652,11 +665,11 @@ export default function TargetDetailsPage() {
         query(collection(db, "reports"), where("targetId", "==", activeTargetId), where("status", "==", "approved"), where("adminPinned", "==", true))
       );
       for (const item of pinnedSnap.docs) {
-        await updateDoc(doc(db, "reports", item.id), { adminPinned: false, updatedAt: Date.now() });
+        await patchReportOnServer(item.id, { adminPinned: false });
       }
 
       const adminEvidenceTier = classifyEvidenceTier(uploadedImageUrls.length, adminCommentText.trim());
-      await addDoc(collection(db, "reports"), {
+      await createAdminReportOnServer({
         targetId: activeTargetId,
         authorId: user.uid,
         authorEmail: user.email || "",
@@ -678,7 +691,6 @@ export default function TargetDetailsPage() {
         createdAt: Date.now(),
         reviewedAt: Date.now(),
       });
-      await syncTargetStats(db, activeTargetId);
       const tSnap = await getDoc(doc(db, "targets", activeTargetId));
       if (tSnap.exists()) {
         setTarget({ id: tSnap.id, ...tSnap.data() } as TargetRecord);
@@ -749,7 +761,7 @@ export default function TargetDetailsPage() {
       setActionMsg("");
       const uploadedImageUrls = await uploadImagesThroughApi(`${user.uid}_manual_target_${activeTargetId}`, manualFiles);
 
-      await addDoc(collection(db, "reports"), {
+      await createAdminReportOnServer({
         targetId: activeTargetId,
         authorId: user.uid,
         authorEmail: user.email || "",
@@ -1102,6 +1114,22 @@ export default function TargetDetailsPage() {
                     </span>
                   </div>
                 ) : null}
+
+                <div className="glass-cyber-card rounded-2xl p-4" aria-label={lang === "ar" ? "تفسير التقييم" : "Score explanation"}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-foreground">
+                      {isNoData ? (lang === "ar" ? "لا توجد بيانات كافية" : "Not enough data") : confidenceLabel}
+                    </p>
+                    {!isNoData ? <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-black text-muted-foreground">{evidenceCoverage}% {lang === "ar" ? "بأدلة" : "with evidence"}</span> : null}
+                  </div>
+                  <p className="mt-2 text-sm font-medium leading-6 text-muted-foreground">
+                    {isNoData
+                      ? (lang === "ar" ? "لم نعتمد تجارب كافية بعد، لذلك لا نعرض رقمًا قد يكون مضللًا." : "There are not enough approved experiences yet, so we do not show a potentially misleading score.")
+                      : (lang === "ar"
+                        ? `النتيجة مبنية على ${reportCount} تجربة معتمدة: ${reportDerived.scamCount} نصب و${reportDerived.successCount} ناجحة. قوة النتيجة تعتمد على عدد التجارب والأدلة المرفوعة.`
+                        : `Based on ${reportCount} approved experiences: ${reportDerived.scamCount} scam and ${reportDerived.successCount} successful. Confidence reflects report volume and attached evidence.`)}
+                  </p>
+                </div>
 
                 {isHeavyReports ? (
                   <div className="glass-cyber-card rounded-2xl border border-destructive/30 bg-destructive/10 p-4">

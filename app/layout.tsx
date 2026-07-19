@@ -18,8 +18,20 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Trackify | Trust Check',
-  description: 'Trackify helps detect scam gaming pages and sellers with trust scores and user reports.',
+  title: {
+    default: 'Trackify | اتأكد قبل ما تدفع',
+    template: '%s | Trackify',
+  },
+  description: 'ابحث برقم الهاتف أو اسم البائع أو رابط الصفحة، وشاهد البلاغات وتجارب العملاء قبل الدفع.',
+  keywords: ['كشف النصب', 'تقييم البائعين', 'صفحات نصابة', 'متاجر الألعاب', 'Trackify Egypt'],
+  metadataBase: new URL(process.env.APP_URL || 'https://trackify.app'),
+  openGraph: {
+    type: 'website',
+    locale: 'ar_EG',
+    alternateLocale: 'en_US',
+    title: 'Trackify | اتأكد قبل ما تدفع',
+    description: 'تحقق من البائع أو الصفحة قبل تحويل الأموال.',
+  },
   icons: {
     icon: 'https://res.cloudinary.com/dv4qomvdt/image/upload/c_crop,g_center,w_400,h_400/c_fill,w_64,h_64/v1778340096/ChatGPT_Image_May_9_2026_06_21_15_PM_gwhs9o.png?tabicon=6',
     shortcut:
