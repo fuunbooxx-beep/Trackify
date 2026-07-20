@@ -35,7 +35,11 @@ export async function POST(request: Request) {
       .where("descriptionHash", "==", descriptionHash)
       .limit(1)
       .get();
-    if (!duplicate.empty) return NextResponse.json({ ok: false, error: "duplicate_report" }, { status: 409 });
+    // Protect public submissions from accidental spam. Admin manual entries may
+    // intentionally share the same wording for separate customer incidents.
+    if (!adminDirect && !duplicate.empty) {
+      return NextResponse.json({ ok: false, error: "duplicate_report" }, { status: 409 });
+    }
 
     const report = {
       targetId: String(body.targetId || "__pending__"),
