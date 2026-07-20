@@ -104,7 +104,44 @@
 
 /* Animations & Utilities */
 .glass-panel {
-  @apply bg-card/80 backdrop-blur-md border border-border/50 shadow-sm dark:shadow-neon-blue/5;
+  @apply border border-border/70 bg-card/95 shadow-sm backdrop-blur-sm;
+}
+
+/* Professional UI pass: quieter surfaces, restrained depth, clearer hierarchy. */
+.stat-card,
+.info-card,
+.trend-card,
+.trend-section,
+.glass-cyber-card {
+  border-radius: 14px !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.05) !important;
+}
+
+.dark .stat-card,
+.dark .info-card,
+.dark .trend-card,
+.dark .trend-section,
+.dark .glass-cyber-card {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 28px rgba(0, 0, 0, 0.22) !important;
+}
+
+.hero-game-wall {
+  opacity: 0.48;
+  filter: saturate(0.72);
+}
+
+.section-sheen,
+.info-card__blob {
+  opacity: 0.18 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Trackify target profile — cyber / verification shell */

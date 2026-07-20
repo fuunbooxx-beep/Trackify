@@ -1,14 +1,15 @@
 "use client";
 
-import { Moon, Sun, Menu, X, User as UserIcon } from "lucide-react";
+import { Moon, Sun, Menu, X, User as UserIcon, ChevronDown, LayoutDashboard, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useState, useContext, useEffect } from "react";
+import { useState, useContext, useEffect, useRef } from "react";
 import { AuthContext } from "@/lib/providers";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useLanguage } from "@/lib/i18n/context";
 import { reloadWithRouteLoader, showRouteLoader } from "@/components/RouteLoadingController";
 import Link from "next/link";
 import { getAvatarUrl } from "@/lib/avatar";
+import { isAdminUser } from "@/lib/auth-user";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 
@@ -20,6 +21,8 @@ export function Navbar() {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
   const logoSrc =
     mounted && resolvedTheme === "dark"
       ? "https://res.cloudinary.com/dv4qomvdt/image/upload/v1778000404/ChatGPT_Image_May_5_2026_07_58_44_PM_2_-Photoroom_grak0v.png"
@@ -34,6 +37,14 @@ export function Navbar() {
     const routes = ["/", "/report", "/category", "/trending", "/about", user ? "/profile" : "/auth"];
     routes.forEach((route) => router.prefetch(route));
   }, [router, user]);
+
+  useEffect(() => {
+    const closeMenu = (event: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) setAccountMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeMenu);
+    return () => document.removeEventListener("mousedown", closeMenu);
+  }, []);
 
   const handleLogout = async () => {
     showRouteLoader();
@@ -64,7 +75,7 @@ export function Navbar() {
   };
 
   return (
-    <nav className="fixed inset-x-0 top-0 z-50 glass-panel border-b border-white/10 dark:border-white/5 transition-all duration-300 overflow-visible">
+    <nav className="fixed inset-x-0 top-0 z-50 border-b border-border/80 bg-background/95 shadow-sm backdrop-blur-lg transition-colors overflow-visible">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-[4.5rem] items-center justify-between gap-3 overflow-visible">
           <Link
@@ -114,20 +125,30 @@ export function Navbar() {
             )}
 
             {!loading && user ? (
-              <div className="flex items-center gap-2">
-                <Link href="/profile" onClick={showRouteLoader} className="hidden sm:flex items-center gap-2 hover:bg-secondary/80 py-1.5 px-3 rounded-full transition-colors">
-                  <span className="text-sm font-medium">{user.displayName?.split(" ")[0]}</span>
-                  <img src={getAvatarUrl(user.photoURL)} alt="Avatar" className="w-7 h-7 rounded-full border border-border object-cover" />
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="hidden text-sm font-medium text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-full transition-colors sm:inline-flex"
-                >
-                  {t("common.logout", "Log out")}
+              <div ref={accountMenuRef} className="relative hidden sm:block">
+                <button type="button" onClick={() => setAccountMenuOpen((open) => !open)} aria-expanded={accountMenuOpen} className="flex items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 transition-colors hover:border-border hover:bg-secondary/60">
+                  <span className="max-w-24 truncate text-sm font-semibold">{user.displayName?.split(" ")[0] || user.email?.split("@")[0]}</span>
+                  <img src={getAvatarUrl(user.photoURL)} alt="Avatar" className="h-8 w-8 rounded-full border border-border object-cover" />
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${accountMenuOpen ? "rotate-180" : ""}`} />
                 </button>
+                {accountMenuOpen ? (
+                  <motion.div initial={{ opacity: 0, y: 6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="absolute end-0 top-[calc(100%+10px)] w-64 overflow-hidden rounded-xl border border-border bg-card p-2 shadow-xl">
+                    <div className="border-b border-border px-3 py-3">
+                      <p className="truncate text-sm font-bold">{user.displayName || (lang === "ar" ? "حسابي" : "My account")}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground" dir="ltr">{user.email}</p>
+                    </div>
+                    <div className="py-2">
+                      <AccountMenuLink href="/profile" icon={<UserIcon className="h-4 w-4" />} text={lang === "ar" ? "الملف الشخصي" : "Profile"} onClick={() => setAccountMenuOpen(false)} />
+                      {isAdminUser(user) ? <AccountMenuLink href="/dashboard" icon={<LayoutDashboard className="h-4 w-4" />} text={lang === "ar" ? "لوحة الإدارة" : "Admin dashboard"} onClick={() => setAccountMenuOpen(false)} /> : null}
+                    </div>
+                    <button type="button" onClick={() => { setAccountMenuOpen(false); void handleLogout(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start text-sm font-bold text-destructive transition-colors hover:bg-destructive/10">
+                      <LogOut className="h-4 w-4" />{t("common.logout", "Log out")}
+                    </button>
+                  </motion.div>
+                ) : null}
               </div>
             ) : (
-              <Link href="/auth" onClick={showRouteLoader} className="hidden items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-full text-sm font-bold transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)] dark:shadow-[0_0_15px_rgba(0,243,255,0.3)] dark:bg-neon-blue dark:text-black sm:flex">
+              <Link href="/auth" onClick={showRouteLoader} className="hidden items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 sm:flex">
                 <UserIcon className="w-4 h-4" />
                 <span>{t("navbar.signIn", "Sign in")}</span>
               </Link>
@@ -163,6 +184,7 @@ export function Navbar() {
             {user ? (
               <>
                 <MobileNavLink href="/profile" text={t("common.myAccount", "My account")} onClick={() => setMobileMenuOpen(false)} />
+                {isAdminUser(user) ? <MobileNavLink href="/dashboard" text={lang === "ar" ? "لوحة الإدارة" : "Admin dashboard"} onClick={() => setMobileMenuOpen(false)} /> : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -205,6 +227,10 @@ export function Navbar() {
       )}
     </nav>
   );
+}
+
+function AccountMenuLink({ href, icon, text, onClick }: { href: string; icon: React.ReactNode; text: string; onClick: () => void }) {
+  return <Link href={href} onClick={() => { showRouteLoader(); onClick(); }} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors hover:bg-secondary">{icon}<span>{text}</span></Link>;
 }
 
 function NavLink({ href, text, active }: { href: string; text: string; active?: boolean }) {

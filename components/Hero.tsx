@@ -148,7 +148,7 @@ export function Hero() {
         <p className="mt-6 max-w-2xl text-sm font-medium leading-7 text-white/65 sm:text-lg">
           {lang === "ar"
             ? "ابحث برقم الهاتف أو اسم البائع أو رابط الصفحة، وشوف تقييم الثقة وتجارب الناس قبل أي معاملة."
-            : "Search a phone number, seller name, or page link. See trust scores and real reports before making a gaming deal."}
+            : "Search a phone number r, seller name, or page link. See trust scores and real reports before making a gaming deal."}
         </p>
 
         <form

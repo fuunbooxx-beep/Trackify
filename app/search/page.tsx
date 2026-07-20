@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { AlertTriangle, HelpCircle, Loader2, Search as SearchIcon, ArrowLeft, Phone, ExternalLink } from "lucide-react";
@@ -28,11 +28,15 @@ function normalizeSearchDisplay(value: string) {
 
 function SearchContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const q = searchParams.get("q") || "";
+  const [searchInput, setSearchInput] = useState(q);
   const [loading, setLoading] = useState(true);
   const [results, setResults] = useState<ExplainedTarget[]>([]);
   const [suggestion, setSuggestion] = useState<ScoredTarget | null>(null);
   const { lang } = useLanguage();
+
+  useEffect(() => setSearchInput(q), [q]);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -77,8 +81,8 @@ function SearchContent() {
         <span>{lang === "ar" ? "رجوع للرئيسية" : "Back to home"}</span>
       </Link>
       
-      <div className="mb-12">
-        <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
+      <div className="mb-8">
+        <h1 className="mb-2 flex items-center gap-3 text-2xl font-bold sm:text-3xl">
           <SearchIcon className="w-8 h-8 text-primary dark:text-neon-blue" />
           <span>{lang === "ar" ? `نتائج البحث عن "${normalizeSearchDisplay(q)}"` : `Search results for "${normalizeSearchDisplay(q)}"`}</span>
         </h1>
@@ -89,14 +93,25 @@ function SearchContent() {
         </p>
       </div>
 
+      <form onSubmit={(event) => { event.preventDefault(); const value = searchInput.trim(); if (value) router.push(`/search?q=${encodeURIComponent(value)}`); }} className="mb-10 flex gap-2 rounded-xl border border-border bg-card p-2 shadow-sm">
+        <SearchIcon className="ms-2 mt-3 h-5 w-5 shrink-0 text-muted-foreground" />
+        <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-2.5 text-base font-medium outline-none" placeholder={lang === "ar" ? "اسم، رقم هاتف، أو رابط..." : "Name, phone number, or page link..."} />
+        <button className="rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90">{lang === "ar" ? "بحث" : "Search"}</button>
+      </form>
+
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="w-12 h-12 animate-spin text-primary dark:text-neon-blue" />
           <p className="text-muted-foreground font-medium text-lg animate-pulse">{lang === "ar" ? "جاري البحث في قاعدة البيانات..." : "Searching the database..."}</p>
         </div>
       ) : results.length > 0 ? (
-        <div className="space-y-6">
-          {results.map((target, idx) => (
+        <div className="space-y-10">
+          <section>
+            <div className="mb-3 flex items-center justify-between"><div><p className="text-xs font-bold text-primary">{lang === "ar" ? "أفضل تطابق" : "Best match"}</p><h2 className="mt-1 text-xl font-bold">{lang === "ar" ? "النتيجة الأقرب لبحثك" : "Closest result to your search"}</h2></div><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{results[0].searchScore}% {lang === "ar" ? "تطابق" : "match"}</span></div>
+            <TargetCard target={results[0]} primary />
+          </section>
+          {results.length > 1 ? <section><div className="mb-3"><p className="text-xs font-bold text-muted-foreground">{lang === "ar" ? "نتائج مرتبطة" : "Related identities"}</p><h2 className="mt-1 text-xl font-bold">{lang === "ar" ? "صفحات تشترك في بيانات أو اسم قريب" : "Targets sharing identity signals"}</h2></div><div className="space-y-3">
+          {results.slice(1).map((target, idx) => (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -106,6 +121,7 @@ function SearchContent() {
               <TargetCard target={target} />
             </motion.div>
           ))}
+          </div></section> : null}
         </div>
       ) : (
         <div className="text-center py-20 glass-panel rounded-3xl border border-dashed border-border/60">
@@ -143,7 +159,7 @@ export default function SearchPage() {
   );
 }
 
-function TargetCard({ target }: { target: any }) {
+function TargetCard({ target, primary = false }: { target: any; primary?: boolean }) {
   const { lang } = useLanguage();
   const reportCount = Number(target.reportCount ?? 0);
   const isHeavyReports = reportCount >= 15;
@@ -161,24 +177,24 @@ function TargetCard({ target }: { target: any }) {
           ? "text-orange-500"
           : "text-yellow-500";
   const borderClass = isNoData
-    ? "border-l-border"
+    ? "border-border hover:border-slate-400/50"
     : isHighRisk
-      ? "border-l-destructive glow-warning"
+      ? "border-border hover:border-destructive/50"
       : isTrusted
-        ? "border-l-green-500 hover:glow-secure"
+        ? "border-border hover:border-green-500/50"
         : isWarning
-          ? "border-l-orange-500"
-          : "border-l-yellow-500";
-  const heavyBorder = isHeavyReports ? "ring-2 ring-destructive/35 dark:ring-destructive/45" : "";
+          ? "border-border hover:border-orange-500/50"
+          : "border-border hover:border-primary/50";
+  const heavyBorder = "";
 
   return (
     <Link href={getTargetHref(target)} className="block">
       <div
-        className={`glass-panel p-6 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-l-4 transition-all hover:scale-[1.01] ${borderClass} ${heavyBorder}`}
+        className={`group flex flex-col items-start justify-between gap-6 rounded-xl border bg-card shadow-sm transition-colors sm:flex-row sm:items-center ${primary ? "p-6 sm:p-8" : "p-5 sm:p-6"} ${borderClass} ${heavyBorder}`}
       >
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <h3 className="text-xl font-bold">{target.name}</h3>
+            <h3 className={primary ? "text-2xl font-bold" : "text-lg font-bold"}>{target.name}</h3>
             <span className="text-xs font-bold px-2 py-1 bg-secondary rounded-md uppercase tracking-wider">{target.type}</span>
             <span className="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-black text-primary dark:text-neon-blue">
               {getTargetCategoryLabel(normalizeTargetCategory(target.category), lang)}
@@ -215,7 +231,7 @@ function TargetCard({ target }: { target: any }) {
           </div>
         </div>
         
-        <div className="flex items-center gap-6 shrink-0 bg-background/50 p-4 rounded-xl">
+        <div className="flex shrink-0 items-center gap-6 rounded-lg border border-border/70 bg-background/60 p-4">
           <div className="text-center">
             <div className="text-xs text-muted-foreground font-bold mb-1 uppercase tracking-wider">Score</div>
             <div className={`text-2xl font-black font-inter ${scoreClass}`}>

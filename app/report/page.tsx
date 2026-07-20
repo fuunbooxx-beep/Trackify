@@ -174,6 +174,7 @@ function ReportContent() {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formStep, setFormStep] = useState(1);
   const [successKind, setSuccessKind] = useState<null | "published" | "pending_review">(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [uploadNotice, setUploadNotice] = useState("");
@@ -577,7 +578,33 @@ function ReportContent() {
           </p>
         </motion.div>
       ) : (
-        <form onSubmit={handleSubmit} className="glass-panel p-6 md:p-10 rounded-3xl space-y-6">
+        <form onSubmit={(event) => {
+          if (formStep < 3) {
+            event.preventDefault();
+            if (formStep === 1 && (!reporterNameInput.trim() || !targetName.trim())) {
+              setErrorMsg(lang === "ar" ? "أكمل الاسم وبيانات الصفحة أولًا." : "Complete your name and target details first.");
+              return;
+            }
+            if (formStep === 2 && description.trim().length < 8) {
+              setErrorMsg(lang === "ar" ? "اكتب وصفًا أوضح للتجربة." : "Please provide a clearer description.");
+              return;
+            }
+            setErrorMsg("");
+            setFormStep((step) => Math.min(3, step + 1));
+            return;
+          }
+          void handleSubmit(event);
+        }} className="glass-panel space-y-6 rounded-2xl p-5 md:p-8">
+          <div className="grid grid-cols-3 gap-2 border-b border-border pb-6">
+            {[
+              lang === "ar" ? "بيانات الهدف" : "Target",
+              lang === "ar" ? "التجربة" : "Experience",
+              lang === "ar" ? "الأدلة" : "Evidence",
+            ].map((label, index) => {
+              const step = index + 1;
+              return <div key={label} className={`flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold sm:px-3 sm:text-sm ${formStep === step ? "bg-primary text-primary-foreground" : step < formStep ? "bg-green-500/10 text-green-600" : "bg-secondary/60 text-muted-foreground"}`}><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-current text-[11px]">{step}</span><span className="truncate">{label}</span></div>;
+            })}
+          </div>
           {errorMsg && (
             <div className="bg-destructive/10 border border-destructive/30 text-destructive p-4 rounded-xl flex items-center gap-3 font-semibold">
               <AlertCircle className="w-5 h-5 shrink-0" />
@@ -591,7 +618,7 @@ function ReportContent() {
             </div>
           )}
 
-          <div className="rounded-xl border border-border bg-background/60 p-4 space-y-3">
+          {formStep === 1 ? <><div className="rounded-xl border border-border bg-background/60 p-4 space-y-3">
             <label className="font-bold text-sm uppercase tracking-wider text-muted-foreground">
               NAME <span className="text-destructive">*</span>
             </label>
@@ -723,7 +750,9 @@ function ReportContent() {
             </div>
           </div>
 
-          <div className="space-y-2">
+          </> : null}
+
+          {formStep === 2 ? <><div className="space-y-2">
             <label className="font-bold text-sm uppercase tracking-wider text-muted-foreground">{lang === "ar" ? "وصف اللي حصل" : "What happened"} <span className="text-destructive">*</span></label>
             <textarea 
               required
@@ -746,8 +775,9 @@ function ReportContent() {
               </label>
             </div>
           )}
+          </> : null}
 
-          <div className="space-y-4">
+          {formStep === 3 ? <><div className="space-y-4">
             <div className="flex items-center justify-between">
               <label className="font-bold text-sm uppercase tracking-wider text-muted-foreground">{lang === "ar" ? "الأدلة الإسكرين شوت (المصداقية)" : "Evidence screenshots"}</label>
               <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded-md">{lang === "ar" ? "حد أقصى 10 صور" : "Max 10 images"}</span>
@@ -813,14 +843,16 @@ function ReportContent() {
                 : "Notice: Turnstile is not enabled in this environment."}
             </p>
           )}
+          </> : null}
 
-          <div className="pt-6 border-t border-border mt-8 flex justify-end">
+          <div className="mt-8 flex items-center justify-between gap-3 border-t border-border pt-6">
+            {formStep > 1 ? <button type="button" onClick={() => { setErrorMsg(""); setFormStep((step) => Math.max(1, step - 1)); }} className="rounded-lg border border-border px-5 py-3 text-sm font-bold hover:bg-secondary">{lang === "ar" ? "رجوع" : "Back"}</button> : <span />}
             <button 
-              type="submit" 
+              type="submit"
               disabled={isSubmitting || loading}
-              className="bg-primary dark:bg-neon-blue text-white dark:text-black font-bold px-8 py-4 rounded-xl hover:scale-[1.02] transition-transform w-full md:w-auto shadow-[0_0_15px_rgba(37,99,235,0.3)] dark:shadow-[0_0_15px_rgba(0,243,255,0.3)] disabled:opacity-50 disabled:hover:scale-100"
+              className="w-full rounded-lg bg-primary px-8 py-3.5 font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 md:w-auto"
             >
-              {isSubmitting ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...") : (lang === "ar" ? "شارك تجربتك" : "Share Your Experience")}
+              {formStep < 3 ? (lang === "ar" ? "التالي" : "Continue") : isSubmitting ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...") : (lang === "ar" ? "إرسال للمراجعة" : "Submit for review")}
             </button>
           </div>
         </form>
