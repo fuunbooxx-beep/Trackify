@@ -138,7 +138,11 @@ async function createAdminReportOnServer(payload: Record<string, unknown>) {
   const response = await fetch("/api/reports/create", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, adminDirect: true }),
   });
-  if (!response.ok) throw new Error("report_create_failed");
+  if (!response.ok) {
+    const result = (await response.json().catch(() => ({}))) as { error?: string; fields?: string[] };
+    const detail = result.fields?.length ? `: ${result.fields.join(", ")}` : "";
+    throw new Error(`${result.error || "report_create_failed"}${detail}`);
+  }
 }
 
 export default function DashboardPage() {

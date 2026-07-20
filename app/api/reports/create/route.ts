@@ -6,7 +6,7 @@ import { ADMIN_EMAIL } from "@/lib/auth-user";
 import { sanitizeReportText, MAX_DESCRIPTION_LENGTH, normalizeTargetKey, normalizeReportText, simpleHash } from "@/lib/report-safety";
 import { calculateTrustMetrics } from "@/lib/trust-metrics";
 
-const ALLOWED_CATEGORIES = new Set(["scam", "delay", "bad_treatment", "successful_transaction"]);
+const ALLOWED_CATEGORIES = new Set(["scam", "delay", "bad_treatment", "suspicious_untrusted", "successful_transaction"]);
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +18,13 @@ export async function POST(request: Request) {
     const category = String(body.category || "scam");
     const targetNameKey = String(body.targetNameKey || normalizeTargetKey(targetName)).trim().slice(0, 220);
     if (!targetName || description.length < 8 || !ALLOWED_CATEGORIES.has(category) || !targetNameKey) {
-      return NextResponse.json({ ok: false, error: "invalid_report" }, { status: 400 });
+      const fields = [
+        !targetName ? "targetName" : null,
+        description.length < 8 ? "description" : null,
+        !ALLOWED_CATEGORIES.has(category) ? "category" : null,
+        !targetNameKey ? "targetNameKey" : null,
+      ].filter(Boolean);
+      return NextResponse.json({ ok: false, error: "invalid_report", fields }, { status: 400 });
     }
 
     const authorId = data.user?.id || `guest_${crypto.randomUUID()}`;
