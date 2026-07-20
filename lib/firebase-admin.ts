@@ -2,10 +2,17 @@ import "server-only";
 
 import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import type { Firestore } from "firebase-admin/firestore";
 import fs from "node:fs";
 import path from "node:path";
 
 function loadServiceAccount() {
+  const envProjectId = process.env.FIREBASE_PROJECT_ID?.trim();
+  const envClientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const envPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
+  if (envProjectId && envClientEmail && envPrivateKey) {
+    return { projectId: envProjectId, clientEmail: envClientEmail, privateKey: envPrivateKey.replace(/\\n/g, "\n") };
+  }
   const configuredPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim();
   if (!configuredPath) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT_PATH is not configured.");
@@ -29,7 +36,21 @@ function loadServiceAccount() {
   };
 }
 
-const app = getApps().length ? getApp() : initializeApp({ credential: cert(loadServiceAccount()) });
+let firestore: Firestore | null = null;
+function getAdminDb() {
+  if (!firestore) {
+    const app = getApps().length ? getApp() : initializeApp({ credential: cert(loadServiceAccount()) });
+    firestore = getFirestore(app);
+  }
+  return firestore;
+}
 
-export const adminDb = getFirestore(app);
-
+// Keep credential loading out of Next's build-time page-data collection. The
+// credential is required only when an API request actually touches Firestore.
+export const adminDb = new Proxy({} as Firestore, {
+  get(_target, property) {
+    const db = getAdminDb();
+    const value = Reflect.get(db as object, property, db);
+    return typeof value === "function" ? value.bind(db) : value;
+  },
+});
