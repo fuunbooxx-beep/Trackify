@@ -29,6 +29,11 @@ export async function POST(request: Request) {
 
     const authorId = data.user?.id || `guest_${crypto.randomUUID()}`;
     const adminDirect = Boolean(body.adminDirect) && data.user?.email?.trim().toLowerCase() === ADMIN_EMAIL;
+    const adminManual = adminDirect && body.source === "admin_manual";
+    const reporterName = sanitizeReportText(String(body.reporterName || "")).slice(0, 60);
+    if (adminManual && !reporterName) {
+      return NextResponse.json({ ok: false, error: "invalid_report", fields: ["reporterName"] }, { status: 400 });
+    }
     const descriptionHash = String(body.descriptionHash || simpleHash(normalizeReportText(description))).slice(0, 128);
     const duplicate = await adminDb.collection("reports")
       .where("targetNameKey", "==", targetNameKey)
@@ -45,7 +50,7 @@ export async function POST(request: Request) {
       targetId: String(body.targetId || "__pending__"),
       authorId,
       authorEmail: data.user?.email || "",
-      reporterName: sanitizeReportText(String(body.reporterName || "Anonymous participant")).slice(0, 60),
+      reporterName: reporterName || "Anonymous participant",
       isAnonymousReporter: Boolean(body.isAnonymousReporter),
       isGuest: !data.user,
       targetName,
@@ -58,12 +63,18 @@ export async function POST(request: Request) {
       evidenceImages: Array.isArray(body.evidenceImages) ? body.evidenceImages.filter((x): x is string => typeof x === "string").slice(0, 10) : [],
       evidenceTier: String(body.evidenceTier || "basic"),
       status: adminDirect ? "approved" : "pending",
-      adminVerified: adminDirect,
-      adminPinned: adminDirect,
+      adminVerified: adminDirect && !adminManual,
+      adminPinned: adminDirect && !adminManual,
       allowUserEdit: false,
       editRequestPending: false,
       reviewNote: "",
-      source: Boolean(body.isAnonymousReporter) ? "user_anonymous" : "user",
+      source: adminManual
+        ? "admin_manual"
+        : adminDirect
+          ? "admin_direct"
+          : Boolean(body.isAnonymousReporter)
+            ? "user_anonymous"
+            : "user",
       createdAt: Date.now(),
       createdAtServer: FieldValue.serverTimestamp(),
       reviewedAt: adminDirect ? Date.now() : 0,

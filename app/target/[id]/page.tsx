@@ -62,7 +62,6 @@ import {
 import { useLanguage } from "@/lib/i18n/context";
 import { getAdminAvatarUrl, getAvatarUrl } from "@/lib/avatar";
 import { classifyEvidenceTier, formatEvidenceTierLabel } from "@/lib/evidence-classify";
-import { syncTargetStats } from "@/lib/trust-score";
 
 async function patchReportOnServer(reportId: string, payload: Record<string, unknown>) {
   const response = await fetch(`/api/reports/${encodeURIComponent(reportId)}`, {
@@ -218,7 +217,6 @@ export default function TargetDetailsPage() {
   };
 
   const refreshTargetAfterReportChange = async () => {
-    await syncTargetStats(db, activeTargetId);
     const targetSnap = await getDoc(doc(db, "targets", activeTargetId));
     if (targetSnap.exists()) {
       setTarget({ id: targetSnap.id, ...targetSnap.data() } as TargetRecord);
@@ -471,7 +469,6 @@ export default function TargetDetailsPage() {
         patch.editRequestPending = false;
       }
       await patchReportOnServer(report.id, patch);
-      await syncTargetStats(db, activeTargetId);
       editNewPreviews.forEach((url) => URL.revokeObjectURL(url));
       setEditNewFiles([]);
       setEditNewPreviews([]);
@@ -751,8 +748,12 @@ export default function TargetDetailsPage() {
   const submitManualReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin || !user || !target) return;
-    if (!manualDescription.trim()) {
-      setActionMsg(lang === "ar" ? "اكتب وصف البلاغ أولًا." : "Please enter report description first.");
+    if (!manualReporterName.trim()) {
+      setActionMsg(lang === "ar" ? "اكتب اسم العميل أولًا." : "Please enter the customer name first.");
+      return;
+    }
+    if (manualDescription.trim().length < 8) {
+      setActionMsg(lang === "ar" ? "اكتب وصفًا أوضح للبلاغ (8 أحرف على الأقل)." : "Please enter a clearer report description (at least 8 characters).");
       return;
     }
 
@@ -765,7 +766,7 @@ export default function TargetDetailsPage() {
         targetId: activeTargetId,
         authorId: user.uid,
         authorEmail: user.email || "",
-        reporterName: manualReporterName.trim() || "Manual Entry",
+        reporterName: manualReporterName.trim(),
         source: "admin_manual",
         targetName: String(target.name || ""),
         targetPhone: manualTargetPhone.trim(),
@@ -1253,7 +1254,8 @@ export default function TargetDetailsPage() {
                   value={manualReporterName}
                   onChange={(e) => setManualReporterName(e.target.value)}
                   className="input"
-                  placeholder={lang === "ar" ? "اسم العميل (اختياري)" : "Customer name (optional)"}
+                  placeholder={lang === "ar" ? "اسم العميل" : "Customer name"}
+                  required
                 />
                 <input
                   value={manualTargetPhone}
@@ -1286,6 +1288,7 @@ export default function TargetDetailsPage() {
                 onChange={(e) => setManualDescription(e.target.value)}
                 className="input min-h-[120px]"
                 placeholder={lang === "ar" ? "اكتب وصف البلاغ..." : "Write report description..."}
+                minLength={8}
                 required
               />
               <div className="space-y-2">
