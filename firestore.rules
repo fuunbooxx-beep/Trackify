@@ -4,8 +4,7 @@ service cloud.firestore {
     
     // Global Safety Net
     match /{document=**} {
-      allow read: if true;
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // Primitives
@@ -54,6 +53,13 @@ service cloud.firestore {
     // Reports Collection
     match /reports/{reportId} {
       allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    // User-owned page checks. Reads power profile/admin views; all writes go
+    // through authenticated server routes.
+    match /checkRequests/{requestId} {
+      allow get, list: if false;
       allow create, update, delete: if false;
     }
 

@@ -4,7 +4,7 @@ import { Navbar } from "@/components/Navbar";
 import { showRouteLoader } from "@/components/RouteLoadingController";
 import { AuthContext } from "@/lib/providers";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, LayoutDashboard, Link as LinkIcon, Loader2, Save, ShieldCheck, UploadCloud } from "lucide-react";
+import { CheckCircle2, Clock3, ExternalLink, Image as ImageIcon, LayoutDashboard, Link as LinkIcon, Loader2, Save, SearchCheck, ShieldAlert, ShieldCheck, UploadCloud } from "lucide-react";
 import { motion } from "motion/react";
 import { useLanguage } from "@/lib/i18n/context";
 import Link from "next/link";
@@ -21,6 +21,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const isAdmin = isAdminUser(user);
   const [reports, setReports] = useState<any[]>([]);
+  const [checkRequests, setCheckRequests] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
@@ -46,11 +47,16 @@ export default function ProfilePage() {
         const tasks: Promise<any>[] = [
           getDocs(query(collection(db, "reports"), where("authorId", "==", user.uid))),
           getDocs(query(collection(db, "notifications"), where("userId", "==", user.uid))),
+          fetch("/api/check-requests", { cache: "no-store" }).then(async (response) => {
+            const body = (await response.json().catch(() => ({}))) as { requests?: any[] };
+            if (!response.ok) throw new Error("check_requests_load_failed");
+            return body;
+          }),
         ];
         if (isAdmin) {
           tasks.push(getDocs(query(collection(db, "notifications"), where("audience", "==", "admin"))));
         }
-        const [reportsSnap, notificationsSnap, adminNotificationsSnap] = await Promise.all(tasks);
+        const [reportsSnap, notificationsSnap, checkRequestsPayload, adminNotificationsSnap] = await Promise.all(tasks);
         setReports(
           reportsSnap.docs
             .map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }))
@@ -59,6 +65,10 @@ export default function ProfilePage() {
         setNotifications(
           notificationsSnap.docs
             .map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }))
+            .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+        );
+        setCheckRequests(
+          (checkRequestsPayload.requests || [])
             .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
         );
         if (isAdmin && adminNotificationsSnap) {
@@ -284,12 +294,18 @@ export default function ProfilePage() {
               <div className="space-y-3">
                 {adminNotifications.slice(0, 8).map((item) => (
                   <div key={item.id} className="rounded-xl border border-border p-3 bg-background/60">
-                    <p className="font-bold">{item.title || "-"}</p>
-                    <p className="text-sm text-muted-foreground">{item.message || "-"}</p>
-                    {(item.targetName || item.targetLink) && (
+                    <p className="font-bold">{lang === "ar" ? (item.titleAr || item.title || "-") : (item.title || "-")}</p>
+                    <p className="text-sm text-muted-foreground">{lang === "ar" ? (item.messageAr || item.message || "-") : (item.message || "-")}</p>
+                    {(item.targetName || item.targetLink || item.targetPhone) && (
                       <p className="mt-1 text-xs text-muted-foreground" dir="ltr">
-                        {item.targetName ? `• ${item.targetName}` : ""} {item.targetLink ? `• ${item.targetLink}` : ""}
+                        {item.targetName ? `• ${item.targetName}` : ""} {item.targetLink ? `• ${item.targetLink}` : ""} {item.targetPhone ? `• ${item.targetPhone}` : ""}
                       </p>
+                    )}
+                    {item.kind === "check_request_pending" && (
+                      <Link href="/dashboard?tab=checks" className="mt-2 inline-flex items-center gap-1 text-xs font-black text-primary hover:underline">
+                        {lang === "ar" ? "فتح طلبات الفحص" : "Open check requests"}
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
                     )}
                   </div>
                 ))}
@@ -297,6 +313,101 @@ export default function ProfilePage() {
             )}
           </div>
         )}
+
+        <div className="glass-panel mb-6 rounded-3xl p-6 sm:p-8">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <SearchCheck className="h-5 w-5 text-primary dark:text-neon-blue" />
+                <h2 className="text-xl font-bold">Check it for me</h2>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {lang === "ar"
+                  ? "طلبات فحص الصفحات والنتائج المحفوظة على حسابك."
+                  : "Your page-check requests and saved review results."}
+              </p>
+            </div>
+            <Link
+              href="/#check-it-for-me"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-black transition hover:bg-secondary"
+            >
+              <SearchCheck className="h-4 w-4" />
+              {lang === "ar" ? "طلب فحص جديد" : "New check"}
+            </Link>
+          </div>
+
+          {dataLoading ? (
+            <div className="flex items-center gap-2 py-6 text-sm font-medium text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {lang === "ar" ? "جاري تحميل طلبات الفحص..." : "Loading check requests..."}
+            </div>
+          ) : checkRequests.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border bg-background/50 p-6 text-center">
+              <p className="font-bold">{lang === "ar" ? "لسه ما طلبتش فحص أي صفحة." : "You haven’t requested a page check yet."}</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {lang === "ar" ? "لو الصفحة مش موجودة في البحث، ابعت بياناتها وإحنا نراجعها لك." : "If a page is missing from search, send its details and we’ll review it."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {checkRequests.map((item) => {
+                const pending = item.status === "pending";
+                const resultClass =
+                  item.result === "safe"
+                    ? "border-emerald-500/30 bg-emerald-500/10"
+                    : item.result === "scam"
+                      ? "border-red-500/30 bg-red-500/10"
+                      : "border-amber-500/30 bg-amber-500/10";
+                const resultLabel =
+                  item.result === "safe"
+                    ? lang === "ar" ? "يبدو آمنًا" : "Appears safe"
+                    : item.result === "scam"
+                      ? lang === "ar" ? "خطر / نصاب" : "High risk / scam"
+                      : lang === "ar" ? "البيانات غير كافية" : "Insufficient evidence";
+                return (
+                  <article key={item.id} className={`rounded-2xl border p-4 sm:p-5 ${pending ? "border-border bg-background/60" : resultClass}`}>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black ${pending ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"}`}>
+                            {pending ? <Clock3 className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            {pending ? (lang === "ar" ? "قيد المراجعة" : "Under review") : (lang === "ar" ? "تمت المراجعة" : "Reviewed")}
+                          </span>
+                          {item.createdAt && (
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(item.createdAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="mt-3 break-words text-lg font-black">{item.pageName || item.pageLink || item.phone || "-"}</h3>
+                        <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
+                          {item.pageLink && <span dir="ltr" className="break-all">{item.pageLink}</span>}
+                          {item.phone && <span dir="ltr">{item.phone}</span>}
+                        </div>
+                      </div>
+
+                      {!pending && (
+                        <div className="w-full rounded-xl border border-current/10 bg-background/60 p-4 sm:max-w-sm">
+                          <p className="flex items-center gap-2 font-black">
+                            {item.result === "scam" ? <ShieldAlert className="h-5 w-5 text-red-500" /> : <CheckCircle2 className="h-5 w-5" />}
+                            {resultLabel}
+                          </p>
+                          <p className="mt-2 text-sm font-semibold leading-6">{item.adminComment}</p>
+                          {item.linkedTargetId && (
+                            <Link href={`/target/${item.linkedTargetId}`} className="mt-3 inline-flex items-center gap-1 text-sm font-black text-primary hover:underline">
+                              {lang === "ar" ? "فتح صفحة الفحص الكاملة" : "Open full target page"}
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Link>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="glass-panel p-8 rounded-3xl">
           <h2 className="text-xl font-bold mb-4">{lang === "ar" ? "نشاطك وبلاغاتك" : "Your activity and reports"}</h2>
@@ -340,8 +451,8 @@ export default function ProfilePage() {
             <div className="space-y-3">
               {notifications.map((item) => (
                 <div key={item.id} className="rounded-xl border border-border p-3 bg-background/60">
-                  <p className="font-bold">{item.title || "-"}</p>
-                  <p className="text-sm text-muted-foreground">{item.message || "-"}</p>
+                  <p className="font-bold">{lang === "ar" ? (item.titleAr || item.title || "-") : (item.title || "-")}</p>
+                  <p className="text-sm text-muted-foreground">{lang === "ar" ? (item.messageAr || item.message || "-") : (item.message || "-")}</p>
                 </div>
               ))}
             </div>

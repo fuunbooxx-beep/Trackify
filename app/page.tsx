@@ -9,6 +9,7 @@ import { motion } from "motion/react";
 import { collection, getCountFromServer, query, where } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import { db } from "@/lib/firebase";
+import { CheckItForMe } from "@/components/CheckItForMe";
 
 type HomeStats = {
   trustedSellers: number;
@@ -107,6 +108,8 @@ export default function Home() {
             </motion.div>
           </div>
         </section>
+
+        <CheckItForMe />
 
         {/* Info Section */}
         <section className="mx-auto max-w-5xl px-4 py-14 sm:py-20 md:py-24">

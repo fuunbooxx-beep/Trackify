@@ -39,6 +39,7 @@ import {
   Plus,
   PlusCircle,
   Save,
+  SearchCheck,
   Send,
   ShieldBan,
   Trash2,
@@ -80,6 +81,7 @@ import { classifyEvidenceTier } from "@/lib/evidence-classify";
 import { syncTargetStats } from "@/lib/trust-score";
 import { useLanguage } from "@/lib/i18n/context";
 import { clientIpToBlockedDocId } from "@/lib/ip-block";
+import { AdminCheckRequests } from "@/components/AdminCheckRequests";
 
 const STATUS_OPTIONS = [
   { value: "warning", labelEn: "Warning", labelAr: "تحذير" },
@@ -205,11 +207,11 @@ export default function DashboardPage() {
   const [targetSearch, setTargetSearch] = useState("");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
 
-  type DashboardTab = "targets" | "pending" | "visitors" | "all-reports";
+  type DashboardTab = "targets" | "pending" | "checks" | "visitors" | "all-reports";
   const searchParams = useSearchParams();
   const activeTab = useMemo<DashboardTab>(() => {
     const t = searchParams.get("tab");
-    if (t === "pending" || t === "visitors" || t === "all-reports") return t;
+    if (t === "pending" || t === "checks" || t === "visitors" || t === "all-reports") return t;
     return "targets";
   }, [searchParams]);
 
@@ -1200,6 +1202,7 @@ export default function DashboardPage() {
                 [
                   { id: "targets" as const, ar: "الصفحات والأهداف", en: "Pages & targets", icon: LayoutDashboard },
                   { id: "pending" as const, ar: "بلاغات معلّقة وفلترة", en: "Pending & filters", icon: ListChecks },
+                  { id: "checks" as const, ar: "طلبات Check it for me", en: "Check requests", icon: SearchCheck },
                   { id: "visitors" as const, ar: "زوار الموقع", en: "Site visitors", icon: Users },
                   { id: "all-reports" as const, ar: "كل البلاغات", en: "All reports", icon: AlertCircle },
                 ] as const
@@ -1851,6 +1854,8 @@ export default function DashboardPage() {
           </section>
                 </>
               )}
+
+              {activeTab === "checks" && <AdminCheckRequests lang={lang} />}
 
               {activeTab === "pending" && (
                 <section className="glass-panel rounded-3xl p-5 md:p-8">
